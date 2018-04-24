@@ -19,8 +19,14 @@ ifeq ($(KERNEL_BUILD),1)
 	# These are provided in external module based builds
 	# Need to explicitly define for Kernel-based builds
 	MODNAME := wlan
-	WLAN_ROOT := drivers/staging/qcacld-2.0
+	WLAN_ROOT := techpack/qcacld-2.0
 	WLAN_OPEN_SOURCE := 1
+
+include $(srctree)/techpack/qcacld-2.0/config/lat8053.conf
+export
+
+LINUXINCLUDE += \
+	-include $(srctree)/techpack/qcacld-2.0/config/lat8053conf.h
 endif
 
 ifeq ($(KERNEL_BUILD), 0)
