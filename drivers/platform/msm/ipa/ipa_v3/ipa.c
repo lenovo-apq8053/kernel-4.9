@@ -737,6 +737,7 @@ static long ipa3_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	u32 pyld_sz;
 	u8 header[128] = { 0 };
 	u8 *param = NULL;
+	bool is_vlan_mode;
 	struct ipa_ioc_nat_alloc_mem nat_mem;
 	struct ipa_ioc_nat_ipv6ct_table_alloc table_alloc;
 	struct ipa_ioc_v4_nat_init nat_init;
@@ -746,6 +747,7 @@ static long ipa3_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	struct ipa_ioc_nat_pdn_entry mdfy_pdn;
 	struct ipa_ioc_rm_dependency rm_depend;
 	struct ipa_ioc_nat_dma_cmd *table_dma_cmd;
+	struct ipa_ioc_get_vlan_mode vlan_mode;
 	size_t sz;
 	int pre_entry;
 
@@ -1838,6 +1840,28 @@ static long ipa3_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		}
 		memcpy(param, &ipa3_ctx->ipa_hw_type, pyld_sz);
 		if (copy_to_user((void __user *)arg, param, pyld_sz)) {
+			retval = -EFAULT;
+			break;
+		}
+		break;
+
+	case IPA_IOC_GET_VLAN_MODE:
+		if (copy_from_user(&vlan_mode, (const void __user *)arg,
+			sizeof(struct ipa_ioc_get_vlan_mode))) {
+			retval = -EFAULT;
+			break;
+		}
+		retval = ipa3_is_vlan_mode(
+			vlan_mode.iface,
+			&is_vlan_mode);
+		if (retval)
+			break;
+
+		vlan_mode.is_vlan_mode = is_vlan_mode;
+
+		if (copy_to_user((void __user *)arg,
+			&vlan_mode,
+			sizeof(struct ipa_ioc_get_vlan_mode))) {
 			retval = -EFAULT;
 			break;
 		}
@@ -4694,11 +4718,11 @@ static int ipa3_post_init(const struct ipa3_plat_drv_res *resource_p,
 	ipa3_ctx->ipa_initialization_complete = true;
 	mutex_unlock(&ipa3_ctx->lock);
 
+	ipa3_debugfs_init();
+
 	ipa3_trigger_ipa_ready_cbs();
 	complete_all(&ipa3_ctx->init_completion_obj);
 	pr_info("IPA driver initialization was successful.\n");
-
-	ipa3_debugfs_init();
 
 	return 0;
 
@@ -5071,6 +5095,7 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 	ipa3_ctx->gsi_ch20_wa = resource_p->gsi_ch20_wa;
 	ipa3_ctx->use_ipa_pm = resource_p->use_ipa_pm;
 	ipa3_ctx->ipa3_active_clients_logging.log_rdy = false;
+	ipa3_ctx->ipa_config_is_mhi = resource_p->ipa_mhi_dynamic_config;
 	ipa3_ctx->mhi_evid_limits[0] = resource_p->mhi_evid_limits[0];
 	ipa3_ctx->mhi_evid_limits[1] = resource_p->mhi_evid_limits[1];
 
@@ -5601,6 +5626,7 @@ static int get_ipa_dts_configuration(struct platform_device *pdev,
 	ipa_drv_res->ipa3_hw_mode = 0;
 	ipa_drv_res->modem_cfg_emb_pipe_flt = false;
 	ipa_drv_res->ipa_wdi2 = false;
+	ipa_drv_res->ipa_mhi_dynamic_config = false;
 	ipa_drv_res->use_64_bit_dma_mask = false;
 	ipa_drv_res->use_bw_vote = false;
 	ipa_drv_res->wan_rx_ring_size = IPA_GENERIC_RX_POOL_SZ;
@@ -5661,6 +5687,13 @@ static int get_ipa_dts_configuration(struct platform_device *pdev,
 			"qcom,use-ipa-tethering-bridge");
 	IPADBG(": using TBDr = %s",
 		ipa_drv_res->use_ipa_teth_bridge
+		? "True" : "False");
+
+	ipa_drv_res->ipa_mhi_dynamic_config =
+			of_property_read_bool(pdev->dev.of_node,
+			"qcom,use-ipa-in-mhi-mode");
+	IPADBG(": ipa_mhi_dynamic_config (%s)\n",
+		ipa_drv_res->ipa_mhi_dynamic_config
 		? "True" : "False");
 
 	ipa_drv_res->modem_cfg_emb_pipe_flt =

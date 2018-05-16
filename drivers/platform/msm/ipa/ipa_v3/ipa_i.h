@@ -1441,6 +1441,7 @@ struct ipa3_plat_drv_res {
 	bool gsi_ch20_wa;
 	bool tethered_flow_control;
 	u32 mhi_evid_limits[2]; /* start and end values */
+	bool ipa_mhi_dynamic_config;
 	u32 ipa_tz_unlock_reg_num;
 	struct ipa_tz_unlock_reg_info *ipa_tz_unlock_reg;
 	bool use_ipa_pm;
@@ -2379,4 +2380,5 @@ void __ipa_gsi_irq_rx_scedule_poll(struct ipa3_sys_context *sys);
 int ipa3_tz_unlock_reg(struct ipa_tz_unlock_reg_info *reg_info, u16 num_regs);
 void ipa3_init_imm_cmd_desc(struct ipa3_desc *desc,
 	struct ipahal_imm_cmd_pyld *cmd_pyld);
+int ipa3_is_vlan_mode(enum ipa_vlan_ifaces iface, bool *res);
 #endif /* _IPA3_I_H_ */
