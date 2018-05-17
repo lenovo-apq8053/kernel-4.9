@@ -6,12 +6,10 @@ else
 	KERNEL_BUILD := 0
 endif
 
-
-
 ifeq ($(KERNEL_BUILD), 1)
 	# These are configurable via Kconfig for kernel-based builds
 	# Need to explicitly configure for Android-based builds
-	AUDIO_BLD_DIR := $(ANDROID_BUILD_TOP)/hardware/bsp/kernel/qcom/qcom-msm8x53-v4.9
+	AUDIO_BLD_DIR := $(srctree)
 	AUDIO_ROOT := $(AUDIO_BLD_DIR)/techpack/audio
 	ifeq ($(CONFIG_ARCH_MSM8953), y)
 		include $(AUDIO_ROOT)/config/8953LATauto.conf
@@ -30,6 +28,11 @@ ifeq ($(KERNEL_BUILD), 0)
 		include $(AUDIO_ROOT)/config/sdm670auto.conf
 		export
 		INCS    +=  -include $(AUDIO_ROOT)/config/sdm670autoconf.h
+	endif
+	ifeq ($(CONFIG_ARCH_SDM450), y)
+		include $(AUDIO_ROOT)/config/sdm450auto.conf
+		export
+		INCS    +=  -include $(AUDIO_ROOT)/config/sdm450autoconf.h
 	endif
 endif
 
@@ -57,14 +60,26 @@ UAPI_INC :=	-I$(AUDIO_ROOT)/include/$(UAPI_DIR)
 COMMON_DIR :=	include
 COMMON_INC :=	-I$(AUDIO_ROOT)/$(COMMON_DIR)
 
-############ WCD934X ############
+############ SoC Modules ############
 
-# for WCD934X Codec
-ifdef CONFIG_SND_SOC_WCD934X
-	WCD934X_OBJS += wcd934x.o
-	WCD934X_OBJS += wcd934x-dsp-cntl.o
-	WCD934X_OBJS += wcd934x-mbhc.o
-	WCD934X_OBJS += wcd934x-dsd.o
+# for pinctrl WCD driver
+ifdef CONFIG_PINCTRL_WCD
+	PINCTRL_WCD_OBJS += pinctrl-wcd.o
+endif
+
+# for pinctrl LPI driver
+ifdef CONFIG_PINCTRL_LPI
+	PINCTRL_LPI_OBJS += pinctrl-lpi.o
+endif
+
+# for soundwire driver
+ifdef CONFIG_SOUNDWIRE_WCD_CTRL
+	SWR_CTRL_OBJS += swr-wcd-ctrl.o
+endif
+
+ifdef CONFIG_SOUNDWIRE
+	SWR_OBJS += regmap-swr.o
+	SWR_OBJS += soundwire.o
 endif
 
 LINUX_INC +=	-Iinclude/linux
@@ -87,6 +102,10 @@ CDEFINES +=	-DANI_LITTLE_BYTE_ENDIAN \
 
 KBUILD_CPPFLAGS += $(CDEFINES)
 
+ifeq ($(KERNEL_BUILD), 0)
+KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/techpack/audio/dsp/Module.symvers
+endif
+
 # Currently, for versions of gcc which support it, the kernel Makefile
 # is disabling the maybe-uninitialized warning.  Re-enable it for the
 # AUDIO driver.  Note that we must use EXTRA_CFLAGS here so that it
@@ -100,17 +119,18 @@ ifeq ($(call cc-option-yn, -Wheader-guard),y)
 EXTRA_CFLAGS += -Wheader-guard
 endif
 
-ifeq ($(KERNEL_BUILD), 0)
-KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/techpack/audio/ipc/Module.symvers
-KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/techpack/audio/dsp/Module.symvers
-KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/techpack/audio/asoc/Module.symvers
-KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/techpack/audio/asoc/codecs/Module.symvers
-KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/techpack/audio/soc/Module.symvers
-endif
-
 # Module information used by KBuild framework
-obj-$(CONFIG_SND_SOC_WCD934X) += wcd934x_dlkm.o
-wcd934x_dlkm-y := $(WCD934X_OBJS)
+obj-$(CONFIG_PINCTRL_WCD) += pinctrl_wcd_dlkm.o
+pinctrl_wcd_dlkm-y := $(PINCTRL_WCD_OBJS)
+
+obj-$(CONFIG_PINCTRL_LPI) += pinctrl_lpi_dlkm.o
+pinctrl_lpi_dlkm-y := $(PINCTRL_LPI_OBJS)
+
+obj-$(CONFIG_SOUNDWIRE) += swr_dlkm.o
+swr_dlkm-y := $(SWR_OBJS)
+
+obj-$(CONFIG_SOUNDWIRE_WCD_CTRL) += swr_ctrl_dlkm.o
+swr_ctrl_dlkm-y := $(SWR_CTRL_OBJS)
 
 # inject some build related information
 DEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"

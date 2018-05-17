@@ -22,7 +22,7 @@ endif
 KDIR := $(TOP)/kernel/msm-$(TARGET_KERNEL_VERSION)
 
 ifeq ($(KERNEL_BUILD), 1)
-	AUDIO_BLD_DIR := $(ANDROID_BUILD_TOP)/hardware/bsp/kernel/qcom/qcom-msm8x53-v4.9
+	AUDIO_BLD_DIR := $(srctree)
 	AUDIO_ROOT := $(AUDIO_BLD_DIR)/techpack/audio
 	ifeq ($(CONFIG_ARCH_MSM8953), y)
 		include $(AUDIO_ROOT)/config/8953LATauto.conf

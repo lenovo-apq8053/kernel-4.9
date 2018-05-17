@@ -9,7 +9,7 @@ endif
 ifeq ($(KERNEL_BUILD), 1)
 	# These are configurable via Kconfig for kernel-based builds
 	# Need to explicitly configure for Android-based builds
-	AUDIO_BLD_DIR := $(ANDROID_BUILD_TOP)/hardware/bsp/kernel/qcom/qcom-msm8x53-v4.9
+	AUDIO_BLD_DIR := $(srctree)
 	AUDIO_ROOT := $(AUDIO_BLD_DIR)/techpack/audio
 	ifeq ($(CONFIG_ARCH_MSM8953), y)
 		include $(AUDIO_ROOT)/config/8953LATauto.conf
@@ -23,6 +23,7 @@ ifeq ($(KERNEL_BUILD), 0)
 		include $(AUDIO_ROOT)/config/sdm845auto.conf
 		export
 		INCS    +=  -include $(AUDIO_ROOT)/config/sdm845autoconf.h
+
 	endif
 	ifeq ($(CONFIG_ARCH_SDM670), y)
 		include $(AUDIO_ROOT)/config/sdm670auto.conf
@@ -35,8 +36,6 @@ ifeq ($(KERNEL_BUILD), 0)
 		INCS    +=  -include $(AUDIO_ROOT)/config/sdm450autoconf.h
 	endif
 endif
-
-
 
 # As per target team, build is done as follows:
 # Defconfig : build with default flags
@@ -62,43 +61,35 @@ UAPI_INC :=	-I$(AUDIO_ROOT)/include/$(UAPI_DIR)
 COMMON_DIR :=	include
 COMMON_INC :=	-I$(AUDIO_ROOT)/$(COMMON_DIR)
 
-############ QDSP6V2 ############
+############ Native Enc/Dec ############
 
-ifdef CONFIG_SND_SOC_MSM_QDSP6V2_INTF
-	Q6_OBJS += audio_calibration.o
-	Q6_OBJS += audio_cal_utils.o
-	Q6_OBJS += q6adm.o
-	Q6_OBJS += q6afe.o
-	Q6_OBJS += q6asm.o
-	Q6_OBJS += q6audio-v2.o
-	Q6_OBJS += q6voice.o
-	Q6_OBJS += q6core.o
-	Q6_OBJS += rtac.o
-	Q6_OBJS += q6lsm.o
-	Q6_OBJS += audio_slimslave.o
-	Q6_OBJS += adsp_err.o
-	Q6_OBJS += msm_audio_ion.o
-	Q6_OBJS += avtimer.o
-	Q6_OBJS += q6_init.o
-endif
-ifdef CONFIG_DTS_SRS_TM
-	Q6_OBJS += msm-dts-srs-tm-config.o
-endif
-
-ifdef CONFIG_MSM_ADSP_LOADER
-ADSP_LOADER_OBJS += adsp-loader.o
-endif
-
-ifdef CONFIG_MSM_QDSP6_NOTIFIER
-QDSP6_NOTIFIER_OBJS += audio_notifier.o audio_ssr.o
-endif
-
-ifdef CONFIG_MSM_QDSP6_PDR
-QDSP6_PDR_OBJS += audio_pdr.o
-endif
-
-ifdef CONFIG_MSM_ULTRASOUND
-USF_OBJS += usf.o usfcdev.o q6usm.o
+ifdef CONFIG_MSM_QDSP6V2_CODECS
+	NATIVE_OBJS += q6audio_v2.o q6audio_v2_aio.o
+	NATIVE_OBJS += audio_utils_aio.o
+	NATIVE_OBJS += audio_utils.o
+	NATIVE_OBJS += audio_native.o
+	NATIVE_OBJS += aac_in.o
+	NATIVE_OBJS += amrnb_in.o
+	NATIVE_OBJS += amrwb_in.o
+	NATIVE_OBJS += audio_aac.o
+	NATIVE_OBJS += audio_alac.o
+	NATIVE_OBJS += audio_amrnb.o
+	NATIVE_OBJS += audio_amrwb.o
+	NATIVE_OBJS += audio_amrwbplus.o
+	NATIVE_OBJS += audio_ape.o
+	NATIVE_OBJS += audio_evrc.o
+	NATIVE_OBJS += audio_g711alaw.o
+	NATIVE_OBJS += audio_g711mlaw.o
+	NATIVE_OBJS += audio_hwacc_effects.o
+	NATIVE_OBJS += audio_mp3.o
+	NATIVE_OBJS += audio_multi_aac.o
+	NATIVE_OBJS += audio_qcelp.o
+	NATIVE_OBJS += audio_wma.o
+	NATIVE_OBJS += audio_wmapro.o
+	NATIVE_OBJS += evrc_in.o
+	NATIVE_OBJS += g711alaw_in.o
+	NATIVE_OBJS += g711mlaw_in.o
+	NATIVE_OBJS += qcelp_in.o
 endif
 
 LINUX_INC +=	-Iinclude/linux
@@ -134,39 +125,14 @@ ifeq ($(call cc-option-yn, -Wheader-guard),y)
 EXTRA_CFLAGS += -Wheader-guard
 endif
 
-# If the module name is not "wlan", then the define MULTI_IF_NAME to be the
-# same a the QCA CHIP name. The host driver will then append MULTI_IF_NAME to
-# any string that must be unique for all instances of the driver on the system.
-# This allows multiple instances of the driver with different module names.
-# If the module name is wlan, leave MULTI_IF_NAME undefined and the code will
-# treat the driver as the primary driver.
-ifneq ($(MODNAME), qdsp6v2)
-CHIP_NAME ?= $(MODNAME)
-CDEFINES += -DMULTI_IF_NAME=\"$(CHIP_NAME)\"
-endif
-
 ifeq ($(KERNEL_BUILD), 0)
-KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/techpack/audio/ipc/Module.symvers
+KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/techpack/audio/dsp/Module.symvers
+KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/techpack/audio/asoc/Module.symvers
 endif
 
-ifeq ($(KERNEL_BUILD), 1)
-	obj-y += codecs/
-endif
-
-obj-$(CONFIG_SND_SOC_MSM_QDSP6V2_INTF) += q6_dlkm.o
-q6_dlkm-y := $(Q6_OBJS)
-
-obj-$(CONFIG_MSM_ULTRASOUND) += usf_dlkm.o
-usf_dlkm-y := $(USF_OBJS)
-
-obj-$(CONFIG_MSM_ADSP_LOADER) += adsp_loader_dlkm.o
-adsp_loader_dlkm-y := $(ADSP_LOADER_OBJS)
-
-obj-$(CONFIG_MSM_QDSP6_NOTIFIER) += q6_notifier_dlkm.o
-q6_notifier_dlkm-y := $(QDSP6_NOTIFIER_OBJS)
-
-obj-$(CONFIG_MSM_QDSP6_PDR) += q6_pdr_dlkm.o
-q6_pdr_dlkm-y := $(QDSP6_PDR_OBJS)
+# Module information used by KBuild framework
+obj-$(CONFIG_MSM_QDSP6V2_CODECS) += native_dlkm.o
+native_dlkm-y := $(NATIVE_OBJS)
 
 # inject some build related information
 DEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"

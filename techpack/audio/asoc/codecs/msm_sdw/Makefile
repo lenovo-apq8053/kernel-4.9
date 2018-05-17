@@ -10,7 +10,7 @@ endif
 ifeq ($(KERNEL_BUILD), 1)
 	# These are configurable via Kconfig for kernel-based builds
 	# Need to explicitly configure for Android-based builds
-	AUDIO_BLD_DIR := $(ANDROID_BUILD_TOP)/hardware/bsp/kernel/qcom/qcom-msm8x53-v4.9
+	AUDIO_BLD_DIR := $(srctree)
 	AUDIO_ROOT := $(AUDIO_BLD_DIR)/techpack/audio
 	ifeq ($(CONFIG_ARCH_MSM8953), y)
 		include $(AUDIO_ROOT)/config/8953LATauto.conf
@@ -61,24 +61,17 @@ UAPI_INC :=	-I$(AUDIO_ROOT)/include/$(UAPI_DIR)
 COMMON_DIR :=	include
 COMMON_INC :=	-I$(AUDIO_ROOT)/$(COMMON_DIR)
 
-############ SDM660_CDC ############
+############ MSM Soundwire ############
 
-# for SDM660_CDC Codec
-ifdef CONFIG_SND_SOC_ANALOG_CDC
-	ANALOG_CDC_OBJS += msm-analog-cdc.o
-	ANALOG_CDC_OBJS += sdm660-cdc-irq.o
+# for MSM Soundwire Codec
+ifdef CONFIG_SND_SOC_MSM_SDW
+	MSM_SDW_OBJS += msm_sdw_cdc.o
+	MSM_SDW_OBJS += msm_sdw_regmap.o
+	MSM_SDW_OBJS += msm-sdw-tables.o
+	MSM_SDW_OBJS += msm_sdw_cdc_utils.o
 endif
 
-ifdef CONFIG_SND_SOC_DIGITAL_CDC
-	DIGITAL_CDC_OBJS += msm-digital-cdc.o
-	DIGITAL_CDC_OBJS += msm-digital-cdc-regmap.o
-endif
-
-ifdef CONFIG_SND_SOC_DIGITAL_CDC_LEGACY
-	DIGITAL_CDC_OBJS += msm-digital-cdc-legacy.o
-	DIGITAL_CDC_OBJS += msm-digital-cdc-legacy-regmap.o
-endif
-LINUX_INC +=	-Iinclude/linux -I$(srctree)/drivers/base/regmap
+LINUX_INC +=	-Iinclude/linux
 
 INCS +=		$(COMMON_INC) \
 		$(UAPI_INC)
@@ -111,7 +104,6 @@ ifeq ($(call cc-option-yn, -Wheader-guard),y)
 EXTRA_CFLAGS += -Wheader-guard
 endif
 
-
 ifeq ($(KERNEL_BUILD), 0)
 KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/techpack/audio/ipc/Module.symvers
 KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/techpack/audio/dsp/Module.symvers
@@ -121,13 +113,8 @@ KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/techpack/audio/soc/Module.symvers
 endif
 
 # Module information used by KBuild framework
-obj-$(CONFIG_SND_SOC_ANALOG_CDC) += analog_cdc_dlkm.o
-analog_cdc_dlkm-y := $(ANALOG_CDC_OBJS)
+obj-$(CONFIG_SND_SOC_MSM_SDW) += msm_sdw_dlkm.o
+msm_sdw_dlkm-y := $(MSM_SDW_OBJS)
 
-obj-$(CONFIG_SND_SOC_DIGITAL_CDC) += digital_cdc_dlkm.o
-digital_cdc_dlkm-y := $(DIGITAL_CDC_OBJS)
-
-obj-$(CONFIG_SND_SOC_DIGITAL_CDC_LEGACY) += digital_cdc_dlkm.o
-digital_cdc_dlkm-y := $(DIGITAL_CDC_OBJS)
 # inject some build related information
 DEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"
