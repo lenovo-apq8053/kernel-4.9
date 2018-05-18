@@ -35,7 +35,7 @@
 	alloc_data->table->sgl->dma_address
 
 #define MSM_AUDIO_ION_VA_START 0x10000000
-#define MSM_AUDIO_ION_VA_LEN 0x0FFFFFFF
+#define MSM_AUDIO_ION_VA_LEN 0x10000000
 
 #define MSM_AUDIO_SMMU_SID_OFFSET 32
 
