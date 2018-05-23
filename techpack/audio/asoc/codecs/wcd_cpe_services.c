@@ -1047,7 +1047,7 @@ static void cpe_svc_core_cmi_handler(
 	pr_debug("%s: event = %d\n",
 		 __func__, parameter->event);
 
-	if (parameter->event != CMI_API_MSG)
+	if (parameter->event != CPE_SVC_CMI_MSG)
 		return;
 
 	hdr = (struct cmi_hdr *) parameter->message;
@@ -1170,7 +1170,7 @@ static enum cpe_process_result cpe_boot_complete(
 	}
 
 	pr_debug("%s: boot complete\n", __func__);
-	return CPE_SVC_SUCCESS;
+	return CPE_PROC_SUCCESS;
 }
 
 static enum cpe_process_result cpe_process_send_msg(
