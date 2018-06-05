@@ -3338,17 +3338,16 @@ limProcessStaMlmAddBssRsp( tpAniSirGlobal pMac, tpSirMsgQ limMsgQ,tpPESession ps
             pStaDs->ucUcastSig   = pAddBssParams->staContext.ucUcastSig;
             pStaDs->ucBcastSig   = pAddBssParams->staContext.ucBcastSig;
 
-            //for ETSI, STA should follow AP' country code and judge the country of EU, while we have no valid AP, so need ignore country for ETSI test.
-            //if(pMac->roam.configParam.gStaLocalEDCAEnable && vos_is_etsi_europe_country(pMac->scan.countryCodeCurrent))
-            if(pMac->roam.configParam.gStaLocalEDCAEnable)
-            {
-
-                if (schGetParams(pMac, params, true /*local*/) != eSIR_SUCCESS)
-                    {
-                        PELOGE(limLog(pMac, LOGE, FL("schGetParams(local) failed"));)
-                    }
-                    else
-                        setSchEdcaParams(pMac, params, psessionEntry);
+            /*
+             * for ETSI, STA should follow AP' country code and judge the
+             * country of EU, while we have no valid AP, so need ignore
+             * country for ETSI test.
+             */
+            if (pMac->roam.configParam.gStaLocalEDCAEnable) {
+                if (schGetParams(pMac, params, true) != eSIR_SUCCESS)
+                    PELOGE(limLog(pMac, LOGE, FL("schGetParams(local) failed"));)
+                else
+                    setSchEdcaParams(pMac, params, psessionEntry);
             }
 
             // Downgrade the EDCA parameters if needed

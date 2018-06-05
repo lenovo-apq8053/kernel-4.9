@@ -254,7 +254,11 @@ schGetParams(
     tANI_U32 etsi_b[] = {WNI_CFG_EDCA_ETSI_ACBE, WNI_CFG_EDCA_ETSI_ACBK,
                    WNI_CFG_EDCA_ETSI_ACVI, WNI_CFG_EDCA_ETSI_ACVO};
 
-    if ((wlan_cfgGetStr(pMac, WNI_CFG_COUNTRY_CODE, country_code_str,
+    if(pMac->roam.configParam.gStaLocalEDCAEnable)
+    {
+        val = WNI_CFG_EDCA_PROFILE_ETSI_EUROPE;
+    }
+    else if ((wlan_cfgGetStr(pMac, WNI_CFG_COUNTRY_CODE, country_code_str,
                         &country_code_len) == eSIR_SUCCESS) &&
         vos_is_etsi_europe_country(country_code_str)) {
         val = WNI_CFG_EDCA_PROFILE_ETSI_EUROPE;
