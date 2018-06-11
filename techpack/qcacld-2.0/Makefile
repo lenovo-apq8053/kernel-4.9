@@ -1030,6 +1030,9 @@ CDEFINES :=	-DANI_LITTLE_BYTE_ENDIAN \
 		-DPTT_SOCK_SVC_ENABLE \
 		-Wall\
 		-Werror\
+		-Wno-enum-conversion\
+		-Wno-shift-count-overflow\
+		-Wno-shift-count-negative\
 		-D__linux__ \
 		-DHAL_SELF_STA_PER_BSS=1 \
 		-DWLAN_FEATURE_VOWIFI_11R \
