@@ -725,6 +725,11 @@ enum
 #define CFG_QOS_WMM_MODE_MAX                               (2) //HDD_WMM_NO_QOS
 #define CFG_QOS_WMM_MODE_DEFAULT                           (0) //HDD_WMM_AUTO
 
+#define CFG_STA_LOCAL_EDCA_FOR_ETSI_NAME                "gStaLocalEDCAForETSI"
+#define CFG_STA_LOCAL_EDCA_FOR_ETSI_MIN                 (0)
+#define CFG_STA_LOCAL_EDCA_FOR_ETSI_MAX                 (1)
+#define CFG_STA_LOCAL_EDCA_FOR_ETSI_DEFAULT             (0)
+
 #define CFG_QOS_WMM_80211E_ENABLED_NAME                   "80211eIsEnabled"
 #define CFG_QOS_WMM_80211E_ENABLED_MIN                     (0)
 #define CFG_QOS_WMM_80211E_ENABLED_MAX                     (1)
@@ -4466,8 +4471,8 @@ FG_BTC_BT_INTERVAL_PAGE_P2P_STA_DEFAULT
 #define CFG_ENABLE_5G_BAND_PREF_DEFAULT          (0)
 
 #define CFG_5G_RSSI_BOOST_THRESHOLD_NAME         "5g_rssi_boost_threshold"
-#define CFG_5G_RSSI_BOOST_THRESHOLD_MIN          (-55)
-#define CFG_5G_RSSI_BOOST_THRESHOLD_MAX          (-70)
+#define CFG_5G_RSSI_BOOST_THRESHOLD_MIN          (-70)
+#define CFG_5G_RSSI_BOOST_THRESHOLD_MAX          (-55)
 #define CFG_5G_RSSI_BOOST_THRESHOLD_DEFAULT      (-60)
 
 #define CFG_5G_RSSI_BOOST_FACTOR_NAME            "5g_rssi_boost_factor"
@@ -4488,8 +4493,8 @@ FG_BTC_BT_INTERVAL_PAGE_P2P_STA_DEFAULT
  */
 
 #define CFG_5G_RSSI_PENALIZE_THRESHOLD_NAME      "5g_rssi_penalize_threshold"
-#define CFG_5G_RSSI_PENALIZE_THRESHOLD_MIN       (-65)
-#define CFG_5G_RSSI_PENALIZE_THRESHOLD_MAX       (-80)
+#define CFG_5G_RSSI_PENALIZE_THRESHOLD_MIN       (-80)
+#define CFG_5G_RSSI_PENALIZE_THRESHOLD_MAX       (-65)
 #define CFG_5G_RSSI_PENALIZE_THRESHOLD_DEFAULT   (-70)
 
 #define CFG_5G_RSSI_PENALIZE_FACTOR_NAME         "5g_rssi_penalize_factor"
@@ -4910,6 +4915,7 @@ struct hdd_config {
 
    //WMM QoS Configuration
    hdd_wmm_user_mode_t          WmmMode;
+   v_U8_t                       gStaLocalEDCAEnable;
    v_BOOL_t                     b80211eIsEnabled;
    v_U8_t                       UapsdMask;    // what ACs to setup U-APSD for at assoc
    v_U32_t                      InfraUapsdVoSrvIntv;

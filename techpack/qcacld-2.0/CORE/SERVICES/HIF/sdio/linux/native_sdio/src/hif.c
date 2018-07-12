@@ -381,6 +381,8 @@ A_STATUS HIFInit(OSDRV_CALLBACKS *callbacks)
     return A_OK;
 }
 
+#define MMC_CONSISTENT_ERR_THRESH 5
+
 static A_STATUS
 __HIFReadWrite(HIF_DEVICE *device,
              A_UINT32 address,
@@ -394,6 +396,7 @@ __HIFReadWrite(HIF_DEVICE *device,
     int ret = 0;
     A_UINT8 *tbuffer;
     A_BOOL   bounced = FALSE;
+    static uint8_t mmc_error_count = 0;
 
     if (device == NULL || device->func == NULL)
         return A_ERROR;
@@ -588,6 +591,15 @@ __HIFReadWrite(HIF_DEVICE *device,
                             request & HIF_READ ? "Read " : "Write",
                             request & HIF_ASYNCHRONOUS ? "Async" : "Sync "));
             status = A_ERROR;
+            mmc_error_count++;
+            if (mmc_error_count >= MMC_CONSISTENT_ERR_THRESH) {
+                AR_DEBUG_PRINTF(ATH_DEBUG_ERROR,
+                                ("Trigger SSR due to mmc error\n"));
+                vos_device_crashed(&device->func->dev);
+                mmc_error_count = 0;
+           }
+        } else {
+            mmc_error_count = 0;
         }
     } while (FALSE);
 
