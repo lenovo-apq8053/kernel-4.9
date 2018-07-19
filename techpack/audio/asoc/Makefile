@@ -26,11 +26,16 @@ ifeq ($(KERNEL_BUILD), 0)
 		INCS    +=  -include $(AUDIO_ROOT)/config/sdm845autoconf.h
 	endif
 	ifeq ($(CONFIG_ARCH_SDM670), y)
-		include $(AUDIO_ROOT)/config/sdm670auto.conf
+		include $(AUDIO_ROOT)/config/sdm710auto.conf
 		export
-		INCS    +=  -include $(AUDIO_ROOT)/config/sdm670autoconf.h
+		INCS    +=  -include $(AUDIO_ROOT)/config/sdm710autoconf.h
 	endif
 	ifeq ($(CONFIG_ARCH_SDM450), y)
+		include $(AUDIO_ROOT)/config/sdm450auto.conf
+		export
+		INCS    +=  -include $(AUDIO_ROOT)/config/sdm450autoconf.h
+	endif
+	ifeq ($(CONFIG_ARCH_SDM439), y)
 		include $(AUDIO_ROOT)/config/sdm450auto.conf
 		export
 		INCS    +=  -include $(AUDIO_ROOT)/config/sdm450autoconf.h
@@ -39,6 +44,16 @@ ifeq ($(KERNEL_BUILD), 0)
 		include $(AUDIO_ROOT)/config/sdxpoorwillsauto.conf
 		export
 		INCS    +=  -include $(AUDIO_ROOT)/config/sdxpoorwillsautoconf.h
+	endif
+	ifeq ($(CONFIG_ARCH_MSM8909), y)
+		include $(AUDIO_ROOT)/config/msm8909auto.conf
+		export
+		INCS    +=  -include $(AUDIO_ROOT)/config/msm8909autoconf.h
+	endif
+	ifeq ($(CONFIG_ARCH_MSM8917), y)
+		include $(AUDIO_ROOT)/config/sdm450auto.conf
+		export
+		INCS    +=  -include $(AUDIO_ROOT)/config/sdm450autoconf.h
 	endif
 endif
 
@@ -95,6 +110,11 @@ ifdef CONFIG_SND_SOC_MACHINE_SDXPOORWILLS
 	MACHINE_OBJS += sdxpoorwills.o
 endif
 
+# for APQ8009 external codec sound card driver
+ifdef CONFIG_SND_SOC_EXT_CODEC_8909
+	MACHINE_EXT_OBJS += apq8009-i2s-ext-codec.o
+endif
+
 # for SDM450 internal codec sound card driver
 ifdef CONFIG_SND_SOC_SDM450
 	MACHINE_OBJS += msm8952.o
@@ -104,6 +124,11 @@ endif
 ifdef CONFIG_SND_SOC_EXT_CODEC_SDM450
 	MACHINE_EXT_OBJS += msm8952-slimbus.o
 	MACHINE_EXT_OBJS += msm8952-dai-links.o
+endif
+
+# for MSM8909 sound card driver
+ifdef CONFIG_SND_SOC_BG_8909
+	MACHINE_OBJS += msm_bg.o
 endif
 
 ifdef CONFIG_SND_SOC_CPE
@@ -178,11 +203,11 @@ EXTRA_CFLAGS += -Wheader-guard
 endif
 
 ifeq ($(KERNEL_BUILD), 0)
-KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/techpack/audio/dsp/Module.symvers
-KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/techpack/audio/asoc/codecs/Module.symvers
-KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/techpack/audio/asoc/codecs/wcd934x/Module.symvers
-KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/techpack/audio/asoc/codecs/sdm660_cdc/Module.symvers
-KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/techpack/audio/asoc/codecs/msm_sdw/Module.symvers
+KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/vendor/qcom/opensource/audio-kernel/dsp/Module.symvers
+KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/vendor/qcom/opensource/audio-kernel/asoc/codecs/Module.symvers
+KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/vendor/qcom/opensource/audio-kernel/asoc/codecs/wcd934x/Module.symvers
+KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/vendor/qcom/opensource/audio-kernel/asoc/codecs/sdm660_cdc/Module.symvers
+KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/vendor/qcom/opensource/audio-kernel/asoc/codecs/msm_sdw/Module.symvers
 endif
 ifeq ($(KERNEL_BUILD), 1)
 	obj-y += codecs/
@@ -194,8 +219,14 @@ platform_dlkm-y := $(PLATFORM_OBJS)
 obj-$(CONFIG_SND_SOC_SDM450) += machine_dlkm.o
 machine_dlkm-y := $(MACHINE_OBJS)
 
+obj-$(CONFIG_SND_SOC_EXT_CODEC_8909) += machine_ext_dlkm.o
+machine_ext_dlkm-y := $(MACHINE_EXT_OBJS)
+
 obj-$(CONFIG_SND_SOC_EXT_CODEC_SDM450) += machine_ext_dlkm.o
 machine_ext_dlkm-y := $(MACHINE_EXT_OBJS)
+
+obj-$(CONFIG_SND_SOC_BG_8909) += machine_dlkm.o
+machine_dlkm-y := $(MACHINE_OBJS)
 
 obj-$(CONFIG_SND_SOC_MACHINE_SDM845) += machine_dlkm.o
 machine_dlkm-y := $(MACHINE_OBJS)

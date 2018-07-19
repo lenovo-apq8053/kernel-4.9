@@ -145,6 +145,7 @@
 #define LPASS_BE_QUAT_TDM_TX_6 "QUAT_TDM_TX_6"
 #define LPASS_BE_QUAT_TDM_RX_7 "QUAT_TDM_RX_7"
 #define LPASS_BE_QUAT_TDM_TX_7 "QUAT_TDM_TX_7"
+#define LPASS_BE_AFE_LOOPBACK_TX "AFE_LOOPBACK_TX"
 #define LPASS_BE_QUIN_TDM_RX_0 "QUIN_TDM_RX_0"
 #define LPASS_BE_QUIN_TDM_TX_0 "QUIN_TDM_TX_0"
 #define LPASS_BE_QUIN_TDM_RX_1 "QUIN_TDM_RX_1"
@@ -184,7 +185,6 @@
 #define LPASS_BE_INT5_MI2S_TX "INT5_MI2S_TX"
 #define LPASS_BE_INT6_MI2S_RX "INT6_MI2S_RX"
 #define LPASS_BE_INT6_MI2S_TX "INT6_MI2S_TX"
-#define LPASS_BE_AFE_LOOPBACK_TX "AFE_LOOPBACK_TX"
 /* For multimedia front-ends, asm session is allocated dynamically.
  * Hence, asm session/multimedia front-end mapping has to be maintained.
  * Due to this reason, additional multimedia front-end must be placed before
