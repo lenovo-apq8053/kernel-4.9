@@ -73,7 +73,7 @@ struct avtimer_t {
 };
 
 static struct avtimer_t avtimer;
-//static void avcs_set_isp_fptr(bool enable);
+static void avcs_set_isp_fptr(bool enable);
 
 static int32_t aprv2_core_fn_q(struct apr_client_data *data, void *priv)
 {
@@ -317,28 +317,28 @@ int avcs_core_query_timer(uint64_t *avtimer_tick)
 }
 EXPORT_SYMBOL(avcs_core_query_timer);
 
-// #if 0
-// static void avcs_set_isp_fptr(bool enable)
-// {
-	// struct avtimer_fptr_t av_fptr;
+#if IS_ENABLED(CONFIG_AVTIMER_LEGACY)
+static void avcs_set_isp_fptr(bool enable)
+{
+	struct avtimer_fptr_t av_fptr;
 
-	// if (enable) {
-		// av_fptr.fptr_avtimer_open = avcs_core_open;
-		// av_fptr.fptr_avtimer_enable = avcs_core_disable_power_collapse;
-		// av_fptr.fptr_avtimer_get_time = avcs_core_query_timer;
-		// msm_isp_set_avtimer_fptr(av_fptr);
-	// } else {
-		// av_fptr.fptr_avtimer_open = NULL;
-		// av_fptr.fptr_avtimer_enable = NULL;
-		// av_fptr.fptr_avtimer_get_time = NULL;
-		// msm_isp_set_avtimer_fptr(av_fptr);
-	// }
-// }
-// #else
-// static void avcs_set_isp_fptr(bool enable)
-// {
-// }
-// #endif
+	if (enable) {
+		av_fptr.fptr_avtimer_open = avcs_core_open;
+		av_fptr.fptr_avtimer_enable = avcs_core_disable_power_collapse;
+		av_fptr.fptr_avtimer_get_time = avcs_core_query_timer;
+		msm_isp_set_avtimer_fptr(av_fptr);
+	} else {
+		av_fptr.fptr_avtimer_open = NULL;
+		av_fptr.fptr_avtimer_enable = NULL;
+		av_fptr.fptr_avtimer_get_time = NULL;
+		msm_isp_set_avtimer_fptr(av_fptr);
+	}
+}
+#else
+static void avcs_set_isp_fptr(bool enable)
+{
+}
+#endif
 
 static int avtimer_open(struct inode *inode, struct file *file)
 {
@@ -496,7 +496,7 @@ static int dev_avtimer_probe(struct platform_device *pdev)
 	else
 		avtimer.clk_mult = clk_mult_val;
 
-	//avcs_set_isp_fptr(true);
+	avcs_set_isp_fptr(true);
 
 	pr_debug("%s: avtimer.clk_div = %d, avtimer.clk_mult = %d\n",
 		 __func__, avtimer.clk_div, avtimer.clk_mult);
@@ -529,7 +529,7 @@ static int dev_avtimer_remove(struct platform_device *pdev)
 	cdev_del(&avtimer.myc);
 	class_destroy(avtimer.avtimer_class);
 	unregister_chrdev_region(MKDEV(major, 0), 1);
-	//avcs_set_isp_fptr(false);
+	avcs_set_isp_fptr(false);
 
 	return 0;
 }

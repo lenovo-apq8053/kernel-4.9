@@ -541,7 +541,7 @@ static int msm_compr_read_buffer(struct msm_compr_audio *prtd)
 		return ret;
 	}
 	prtd->bytes_read += buffer_length;
-	prtd->bytes_read_offset += buffer_length;
+	prtd->bytes_read_offset += buffer_length + prtd->ts_header_offset;
 	if (prtd->bytes_read_offset >= prtd->buffer_size)
 		prtd->bytes_read_offset -= prtd->buffer_size;
 
@@ -3691,8 +3691,8 @@ static int msm_compr_adsp_stream_cmd_put(struct snd_kcontrol *kcontrol,
 		goto done;
 	}
 
-	if ((sizeof(struct msm_adsp_event_data) + event_data->payload_len) >=
-					sizeof(ucontrol->value.bytes.data)) {
+	if (event_data->payload_len > sizeof(ucontrol->value.bytes.data)
+			- sizeof(struct msm_adsp_event_data)) {
 		pr_err("%s param length=%d  exceeds limit",
 			__func__, event_data->payload_len);
 		ret = -EINVAL;

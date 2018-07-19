@@ -25,11 +25,26 @@ ifeq ($(KERNEL_BUILD), 0)
 		INCS    +=  -include $(AUDIO_ROOT)/config/sdm845autoconf.h
 	endif
 	ifeq ($(CONFIG_ARCH_SDM670), y)
-		include $(AUDIO_ROOT)/config/sdm670auto.conf
+		include $(AUDIO_ROOT)/config/sdm710auto.conf
 		export
-		INCS    +=  -include $(AUDIO_ROOT)/config/sdm670autoconf.h
+		INCS    +=  -include $(AUDIO_ROOT)/config/sdm710autoconf.h
 	endif
 	ifeq ($(CONFIG_ARCH_SDM450), y)
+		include $(AUDIO_ROOT)/config/sdm450auto.conf
+		export
+		INCS    +=  -include $(AUDIO_ROOT)/config/sdm450autoconf.h
+	endif
+	ifeq ($(CONFIG_ARCH_SDM439), y)
+		include $(AUDIO_ROOT)/config/sdm450auto.conf
+		export
+		INCS    +=  -include $(AUDIO_ROOT)/config/sdm450autoconf.h
+	endif
+	ifeq ($(CONFIG_ARCH_MSM8909), y)
+		include $(AUDIO_ROOT)/config/msm8909auto.conf
+		export
+		INCS    +=  -include $(AUDIO_ROOT)/config/msm8909autoconf.h
+	endif
+	ifeq ($(CONFIG_ARCH_MSM8917), y)
 		include $(AUDIO_ROOT)/config/sdm450auto.conf
 		export
 		INCS    +=  -include $(AUDIO_ROOT)/config/sdm450autoconf.h
@@ -103,7 +118,7 @@ CDEFINES +=	-DANI_LITTLE_BYTE_ENDIAN \
 KBUILD_CPPFLAGS += $(CDEFINES)
 
 ifeq ($(KERNEL_BUILD), 0)
-KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/techpack/audio/dsp/Module.symvers
+KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/vendor/qcom/opensource/audio-kernel/dsp/Module.symvers
 endif
 
 # Currently, for versions of gcc which support it, the kernel Makefile

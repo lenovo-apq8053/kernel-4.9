@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -35,7 +35,7 @@
 #define MAX_PAYLOAD_SIZE		4076
 #define RTAC_MAX_ACTIVE_VOICE_COMBOS	2
 #define RTAC_MAX_ACTIVE_POPP		8
-#define RTAC_BUF_SIZE			163840
+#define RTAC_BUF_SIZE			57344
 
 #define TIMEOUT_MS	1000
 
@@ -1944,17 +1944,26 @@ int __init rtac_init(void)
 		goto nomem;
 	}
 
-	return misc_register(&rtac_misc);
+	if (misc_register(&rtac_misc) != 0) {
+		kzfree(rtac_adm_buffer);
+		kzfree(rtac_asm_buffer);
+		kzfree(rtac_afe_buffer);
+		kzfree(rtac_voice_buffer);
+		goto nomem;
+	}
+
+	return 0;
 nomem:
 	return -ENOMEM;
 }
 
 void rtac_exit(void)
 {
+	misc_deregister(&rtac_misc);
 	kzfree(rtac_adm_buffer);
 	kzfree(rtac_asm_buffer);
 	kzfree(rtac_afe_buffer);
-	misc_deregister(&rtac_misc);
+	kzfree(rtac_voice_buffer);
 }
 
 MODULE_DESCRIPTION("SoC QDSP6v2 Real-Time Audio Calibration driver");
