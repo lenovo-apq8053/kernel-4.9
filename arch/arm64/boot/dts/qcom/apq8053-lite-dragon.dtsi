@@ -433,6 +433,15 @@
 };
 
 &spmi_bus {
+	qcom,pm8953@0 {
+		qcom,power-on@800 {
+			qcom,resin-gpiobase = <1019>;
+			qcom,pon_2 {
+				/delete-property/ linux,code;
+			};
+		};
+	};
+
 	qcom,pmi8950@2 {
 		qcom,leds@a100 {
 			compatible = "qcom,leds-qpnp";
