@@ -17,7 +17,6 @@
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/regulator/qcom,rpm-smd-regulator.h>
 #include <dt-bindings/clock/msm-clocks-8953.h>
-#include <dt-bindings/msm/msm-bus-ids.h>
 
 / {
 	model = "Qualcomm Technologies, Inc. MSM8953";
@@ -30,21 +29,9 @@
 		bootargs = "core_ctl_disable_cpumask=0-7 kpti=0";
 	};
 
-	vendor: vendor {
-		#address-cells = <1>;
-		#size-cells = <1>;
-		ranges = <0 0 0 0xffffffff>;
-		compatible = "simple-bus";
-	};
-
 	firmware: firmware {
 		android {
 			compatible = "android,firmware";
-			vbmeta {
-				compatible = "android,vbmeta";
-				parts = "vbmeta,boot,system,vendor,dtbo,recovery";
-			};
-
 			fstab {
 				compatible = "android,fstab";
 				vendor {
@@ -52,7 +39,7 @@
 					dev = "/dev/block/platform/soc/7824900.sdhci/by-name/vendor";
 					type = "ext4";
 					mnt_flags = "ro,barrier=1,discard";
-					fsmgr_flags = "wait,avb";
+					fsmgr_flags = "wait";
 					status = "ok";
 				};
 				system {
@@ -60,7 +47,7 @@
 					dev = "/dev/block/platform/soc/7824900.sdhci/by-name/system";
 					type = "ext4";
 					mnt_flags = "ro,barrier=1,discard";
-					fsmgr_flags = "wait,avb";
+					fsmgr_flags = "wait";
 					status = "ok";
 				};
 
@@ -81,7 +68,7 @@
 
 		modem_mem: modem_region@0 {
 			compatible = "removed-dma-pool";
-			no-map;
+			no-map-fixup;
 			reg = <0x0 0x86c00000 0x0 0x6a00000>;
 		};
 
@@ -109,7 +96,7 @@
 			compatible = "shared-dma-pool";
 			reusable;
 			alignment = <0 0x400000>;
-			size = <0 0x0b400000>;
+			size = <0 0x09800000>;
 		};
 
 		qseecom_mem: qseecom_region@0 {
@@ -155,7 +142,7 @@
 		dump_mem: mem_dump_region {
 			compatible = "shared-dma-pool";
 			reusable;
-			size = <0x400000>;
+			size = <0 0x2400000>;
 		};
 	};
 
@@ -181,18 +168,7 @@
 		spi3 = &spi_3;
 	};
 
-	soc: soc {
-		/*
-		 * The ordering of these devices is important to boot time
-		 * for iot projects.
-		 */
-		smem: qcom,smem@86300000 {};
-		rpm_bus: qcom,rpm-smd {};
-		clock_gcc: qcom,gcc@1800000 {};
-		ad_hoc_bus: ad-hoc-bus@580000 {};
-		tlmm: pinctrl@1000000 {};
-		sdhc_1: sdhci@7824900 {};
-	};
+	soc: soc { };
 
 };
 
@@ -1242,7 +1218,7 @@
 		reg-names = "wdt-base";
 		interrupts = <0 3 0>, <0 4 0>;
 		qcom,bark-time = <11000>;
-		qcom,pet-time = <9360>;
+		qcom,pet-time = <10000>;
 		qcom,ipi-ping;
 		qcom,wakeup-enable;
 		qcom,scandump-size = <0x40000>;
