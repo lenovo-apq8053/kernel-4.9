@@ -10,7 +10,6 @@
  */
 
 #include <linux/irq_work.h>
-#include <linux/device.h>
 
 /*
  * Provides a framework for allocating simulated interrupts which can be
@@ -35,8 +34,6 @@ struct irq_sim {
 };
 
 int irq_sim_init(struct irq_sim *sim, unsigned int num_irqs);
-int devm_irq_sim_init(struct device *dev, struct irq_sim *sim,
-		      unsigned int num_irqs);
 void irq_sim_fini(struct irq_sim *sim);
 void irq_sim_fire(struct irq_sim *sim, unsigned int offset);
 int irq_sim_irqnum(struct irq_sim *sim, unsigned int offset);
