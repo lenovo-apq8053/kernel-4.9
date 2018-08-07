@@ -101,7 +101,7 @@
 	usb_detect: usb_detect {
 		compatible = "linux,extcon-usb-gpio";
 		vbus-gpio = <&tlmm 57 GPIO_ACTIVE_HIGH>;
-
+		qcom,enable-button-mode;
 		pinctrl-names = "button_active";
 		pinctrl-0 = <&button_active>;
 	};
