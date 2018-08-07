@@ -184,14 +184,6 @@ config INPUT_QPNP_POWER_ON
 	  reporting the change in status of the KPDPWR_N line (connected to the
 	  power-key) as well as reset features.
 
-config INPUT_QPNP_POWER_ON_GPIO
-	tristate "QPNP PMIC POWER-ON Driver w/GPIO subsystem"
-	depends on INPUT_QPNP_POWER_ON
-	select IRQ_SIM
-	default n
-	help
-	  Registers GPIO chip associated with the RESIN interrupt.
-
 config INPUT_SPARCSPKR
 	tristate "SPARC Speaker support"
 	depends on PCI && SPARC64
