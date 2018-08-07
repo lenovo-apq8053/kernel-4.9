@@ -48,7 +48,7 @@
 	};
 };
 
-&tlmm {
+&soc {
 	button_active: button_active {
 		mux {
 			pins = "gpio57";
@@ -95,24 +95,21 @@
                 	drive-strength = <2>;
 		};
 	};
-};
 
-&soc {
-	usb_detect: usb_detect {
-		compatible = "linux,extcon-usb-gpio";
-		vbus-gpio = <&tlmm 57 GPIO_ACTIVE_HIGH>;
-
+	usb_detect {
+		compatible = "qcom,gpio-usbdetect";
+		interrupt-names = "vbus_det_irq";
+		interrupt-parent = <&tlmm>;
+		interrupts = <57 0>;
 		pinctrl-names = "button_active";
 		pinctrl-0 = <&button_active>;
+		qcom,gpio-mode-sel = <&tlmm 57 0>;
+		qcom,enable-button-mode;
 	};
 
 	hbtp {
 		status = "disabled";
 	};
-};
-
-&usb3 {
-	extcon = <&usb_detect>;
 };
 
 &firmware {
