@@ -50,8 +50,7 @@ static void irq_sim_handle_irq(struct irq_work *work)
  * @sim:        The interrupt simulator object to initialize.
  * @num_irqs:   Number of interrupts to allocate
  *
- * On success: return the base of the allocated interrupt range.
- * On failure: a negative errno.
+ * Returns 0 on success and a negative error number on failure.
  */
 int irq_sim_init(struct irq_sim *sim, unsigned int num_irqs)
 {
@@ -80,7 +79,7 @@ int irq_sim_init(struct irq_sim *sim, unsigned int num_irqs)
 	init_irq_work(&sim->work_ctx.work, irq_sim_handle_irq);
 	sim->irq_count = num_irqs;
 
-	return sim->irq_base;
+	return 0;
 }
 EXPORT_SYMBOL_GPL(irq_sim_init);
 
@@ -112,8 +111,7 @@ static void devm_irq_sim_release(struct device *dev, void *res)
  * @sim:        The interrupt simulator object to initialize.
  * @num_irqs:   Number of interrupts to allocate
  *
- * On success: return the base of the allocated interrupt range.
- * On failure: a negative errno.
+ * Returns 0 on success and a negative error number on failure.
  */
 int devm_irq_sim_init(struct device *dev, struct irq_sim *sim,
 		      unsigned int num_irqs)
@@ -134,7 +132,7 @@ int devm_irq_sim_init(struct device *dev, struct irq_sim *sim,
 	dr->sim = sim;
 	devres_add(dev, dr);
 
-	return rv;
+	return 0;
 }
 EXPORT_SYMBOL_GPL(devm_irq_sim_init);
 
