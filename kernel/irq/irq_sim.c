@@ -7,7 +7,6 @@
  * option) any later version.
  */
 
-#include <linux/slab.h>
 #include <linux/irq_sim.h>
 #include <linux/irq.h>
 
