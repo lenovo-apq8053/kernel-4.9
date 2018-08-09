@@ -65,6 +65,11 @@
 	pinctrl-0 = <&uart_console_active>;
 };
 
+/* Enable for coprocessor */
+&i2c_1 {
+	status = "ok";
+};
+
 &i2c_4 {
 	status = "ok";
 	tmp103b@71 {
@@ -93,6 +98,11 @@
 		compatible = "lm36011";
 		reg = <0x64>;
 	};
+};
+
+/* Enable for coprocessor PMIC */
+&i2c_7 {
+	status = "ok";
 };
 
 &sdhc_1 {
