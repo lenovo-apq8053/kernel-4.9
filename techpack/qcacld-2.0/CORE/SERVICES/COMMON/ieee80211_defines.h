@@ -306,8 +306,8 @@ typedef u_int32_t    IEEE80211_SCAN_ID;
 #define IEEE80211_SCAN_CHAN_EVENT         0x0400 /* scan chan event for  offload architectures */
 #define IEEE80211_SCAN_FILTER_PROBE_REQ   0x0800 /* Filter probe requests- applicable only for offload architectures*/
 
-#define IEEE80211_SCAN_PARAMS_MAX_SSID     10
-#define IEEE80211_SCAN_PARAMS_MAX_BSSID    10
+#define IEEE80211_SCAN_PARAMS_MAX_SSID     16
+#define IEEE80211_SCAN_PARAMS_MAX_BSSID    16
 
 
 /* flag definitions passed to scan_cancel API */
