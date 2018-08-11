@@ -574,6 +574,7 @@ config ARCH_QCOM
        select PINCTRL
        select ARCH_WANT_KMAP_ATOMIC_FLUSH
        select SND_SOC_COMPRESS
+       select SND_HWDEP
        help
          Support for Qualcomm MSM/QSD based systems.  This runs on the
          apps processor of the MSM/QSD and depends on a shared memory
@@ -1410,6 +1411,16 @@ config HAVE_ARM_TWD
 	select CLKSRC_OF if OF
 	help
 	  This options enables support for the ARM timer and watchdog unit
+
+config ARCH_MSM8953_SOC_SETTINGS
+	bool "Enable MSM8953 SOC settings"
+	depends on ARCH_MSM8953
+	help
+	  Enable MSM8953 SOC related settings, these generic MSM8953
+	  related settings are required for some of CPUSS sub-system
+	  functionality.
+
+	  If you are not sure what to do, select 'N' here.
 
 config MCPM
 	bool "Multi-Cluster Power Management"

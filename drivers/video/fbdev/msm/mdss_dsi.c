@@ -27,6 +27,7 @@
 #include <linux/msm-bus.h>
 #include <linux/pm_qos.h>
 #include <linux/mdss_io_util.h>
+#include <linux/dma-buf.h>
 
 #include "mdss.h"
 #include "mdss_panel.h"
@@ -45,6 +46,97 @@ static struct mdss_dsi_data *mdss_dsi_res;
 #define DSI_ENABLE_PC_LATENCY PM_QOS_DEFAULT_VALUE
 
 static struct pm_qos_request mdss_dsi_pm_qos_request;
+
+void mdss_dump_dsi_debug_bus(u32 bus_dump_flag,
+	u32 **dump_mem)
+{
+	struct mdss_dsi_data *sdata = mdss_dsi_res;
+	struct mdss_dsi_ctrl_pdata *m_ctrl, *s_ctrl;
+	bool in_log, in_mem;
+	u32 *dump_addr = NULL;
+	u32 status0 = 0, status1 = 0;
+	phys_addr_t phys = 0;
+	int list_size = 0;
+	int i;
+	bool dsi0_active = false, dsi1_active = false;
+
+	if (!sdata || !sdata->dbg_bus || !sdata->dbg_bus_size)
+		return;
+
+	m_ctrl = sdata->ctrl_pdata[0];
+	s_ctrl = sdata->ctrl_pdata[1];
+
+	if (!m_ctrl)
+		return;
+
+	if (m_ctrl && m_ctrl->shared_data->dsi0_active)
+		dsi0_active = true;
+	if (s_ctrl && s_ctrl->shared_data->dsi1_active)
+		dsi1_active = true;
+
+	list_size = (sdata->dbg_bus_size * sizeof(sdata->dbg_bus[0]) * 4);
+
+	in_log = (bus_dump_flag & MDSS_DBG_DUMP_IN_LOG);
+	in_mem = (bus_dump_flag & MDSS_DBG_DUMP_IN_MEM);
+
+	if (in_mem) {
+		if (!(*dump_mem))
+			*dump_mem = dma_alloc_coherent(&sdata->pdev->dev,
+				list_size, &phys, GFP_KERNEL);
+
+		if (*dump_mem) {
+			dump_addr = *dump_mem;
+			pr_info("%s: start_addr:0x%pK end_addr:0x%pK\n",
+				__func__, dump_addr, dump_addr + list_size);
+		} else {
+			in_mem = false;
+			pr_err("dump_mem: allocation fails\n");
+		}
+	}
+
+	pr_info("========= Start DSI Debug Bus =========\n");
+
+	mdss_dsi_clk_ctrl(m_ctrl, m_ctrl->dsi_clk_handle,
+			  MDSS_DSI_CORE_CLK, MDSS_DSI_CLK_ON);
+
+	for (i = 0; i < sdata->dbg_bus_size; i++) {
+		if (dsi0_active) {
+			writel_relaxed(sdata->dbg_bus[i],
+					m_ctrl->ctrl_base + 0x124);
+			wmb(); /* ensure regsiter is committed */
+		}
+		if (dsi1_active) {
+			writel_relaxed(sdata->dbg_bus[i],
+					s_ctrl->ctrl_base + 0x124);
+			wmb(); /* ensure register is committed */
+		}
+
+		if (dsi0_active) {
+			status0 = readl_relaxed(m_ctrl->ctrl_base + 0x128);
+			if (in_log)
+				pr_err("CTRL:0 bus_ctrl: 0x%x status: 0x%x\n",
+					sdata->dbg_bus[i], status0);
+		}
+		if (dsi1_active) {
+			status1 = readl_relaxed(s_ctrl->ctrl_base + 0x128);
+			if (in_log)
+				pr_err("CTRL:1 bus_ctrl: 0x%x status: 0x%x\n",
+					sdata->dbg_bus[i], status1);
+		}
+
+		if (dump_addr && in_mem) {
+			dump_addr[i*4]     = sdata->dbg_bus[i];
+			dump_addr[i*4 + 1] = status0;
+			dump_addr[i*4 + 2] = status1;
+			dump_addr[i*4 + 3] = 0x0;
+		}
+	}
+
+	mdss_dsi_clk_ctrl(m_ctrl, m_ctrl->dsi_clk_handle,
+			  MDSS_DSI_CORE_CLK, MDSS_DSI_CLK_OFF);
+
+	pr_info("========End DSI Debug Bus=========\n");
+}
 
 static void mdss_dsi_pm_qos_add_request(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
@@ -291,6 +383,14 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 		ret = 0;
 	}
 
+	if (gpio_is_valid(ctrl_pdata->vdd_ext_gpio)) {
+		ret = gpio_direction_output(
+			ctrl_pdata->vdd_ext_gpio, 0);
+		if (ret)
+			pr_err("%s: unable to set dir for vdd gpio\n",
+					__func__);
+	}
+
 	if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
 		pr_debug("reset disable: pinctrl not enabled\n");
 
@@ -317,6 +417,15 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
+
+	if (gpio_is_valid(ctrl_pdata->vdd_ext_gpio)) {
+		ret = gpio_direction_output(
+				ctrl_pdata->vdd_ext_gpio, 1);
+		usleep_range(3000, 4000); /* h/w recommended delay */
+		if (ret)
+			pr_err("%s: unable to set dir for vdd gpio\n",
+					__func__);
+	}
 
 	ret = msm_mdss_enable_vreg(
 		ctrl_pdata->panel_power_data.vreg_config,
@@ -1704,7 +1813,8 @@ static int mdss_dsi_blank(struct mdss_panel_data *pdata, int power_state)
 			ATRACE_BEGIN("dsi_panel_off");
 			ret = ctrl_pdata->off(pdata);
 			if (ret) {
-				pr_err("%s: Panel OFF failed\n", __func__);
+				pr_err("%s: Panel OFF failed\n",
+					__func__);
 				goto error;
 			}
 			ATRACE_END("dsi_panel_off");
@@ -2658,7 +2768,6 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 		break;
 	case MDSS_EVENT_PANEL_OFF:
 		power_state = (int) (unsigned long) arg;
-		disable_esd_thread();
 		ctrl_pdata->ctrl_state &= ~CTRL_STATE_MDP_ACTIVE;
 		if (ctrl_pdata->off_cmds.link_state == DSI_LP_MODE)
 			rc = mdss_dsi_blank(pdata, power_state);
@@ -3171,6 +3280,7 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 	struct mdss_util_intf *util;
 	static int te_irq_registered;
 	struct mdss_panel_data *pdata;
+	struct mdss_panel_cfg *pan_cfg = NULL;
 
 	if (!pdev || !pdev->dev.of_node) {
 		pr_err("%s: pdev not found for DSI controller\n", __func__);
@@ -3200,6 +3310,14 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 	util = mdss_get_util_intf();
 	if (util == NULL) {
 		pr_err("Failed to get mdss utility functions\n");
+		return -ENODEV;
+	}
+
+	pan_cfg = util->panel_intf_type(MDSS_PANEL_INTF_SPI);
+	if (IS_ERR(pan_cfg)) {
+		return PTR_ERR(pan_cfg);
+	} else if (pan_cfg) {
+		pr_debug("%s: SPI is primary\n", __func__);
 		return -ENODEV;
 	}
 
@@ -3339,6 +3457,8 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 		ctrl_pdata->shared_data->dsi0_active = true;
 	else
 		ctrl_pdata->shared_data->dsi1_active = true;
+
+	mdss_dsi_debug_bus_init(mdss_dsi_res);
 
 	return 0;
 
@@ -4069,6 +4189,7 @@ static int mdss_dsi_parse_gpio_params(struct platform_device *ctrl_pdev,
 		if (!gpio_is_valid(ctrl_pdata->disp_en_gpio))
 			pr_debug("%s:%d, Disp_en gpio not specified\n",
 					__func__, __LINE__);
+		pdata->panel_en_gpio = ctrl_pdata->disp_en_gpio;
 	}
 
 	ctrl_pdata->disp_te_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
@@ -4087,6 +4208,11 @@ static int mdss_dsi_parse_gpio_params(struct platform_device *ctrl_pdev,
 	ctrl_pdata->bklt_en_gpio_invert =
 			of_property_read_bool(ctrl_pdev->dev.of_node,
 				"qcom,platform-bklight-en-gpio-invert");
+
+	ctrl_pdata->vdd_ext_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+		"qcom,ext-vdd-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->vdd_ext_gpio))
+		pr_info("%s: ext vdd gpio not specified\n", __func__);
 
 	ctrl_pdata->rst_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
 			 "qcom,platform-reset-gpio", 0);

@@ -80,6 +80,11 @@
 /* Maximum number of VSYNC wait attempts for RSC state transition */
 #define MAX_RSC_WAIT	5
 
+#define TOPOLOGY_DUALPIPE_MERGE_MODE(x) \
+		(((x) == SDE_RM_TOPOLOGY_DUALPIPE_DSCMERGE) || \
+		((x) == SDE_RM_TOPOLOGY_DUALPIPE_3DMERGE) || \
+		((x) == SDE_RM_TOPOLOGY_DUALPIPE_3DMERGE_DSC))
+
 /**
  * enum sde_enc_rc_events - events for resource control state machine
  * @SDE_ENC_RC_EVENT_KICKOFF:
@@ -195,7 +200,8 @@ enum sde_enc_rc_states {
  * @disp_info:			local copy of msm_display_info struct
  * @misr_enable:		misr enable/disable status
  * @misr_frame_count:		misr frame count before start capturing the data
- * @idle_pc_supported:		indicate if idle power collaps is supported
+ * @idle_pc_enabled:		indicate if idle power collapse is enabled
+ *				currently. This can be controlled by user-mode
  * @rc_lock:			resource control mutex lock to protect
  *				virt encoder over various state changes
  * @rc_state:			resource controller state
@@ -215,6 +221,7 @@ enum sde_enc_rc_states {
 struct sde_encoder_virt {
 	struct drm_encoder base;
 	spinlock_t enc_spinlock;
+	struct mutex vblank_ctl_lock;
 	uint32_t bus_scaling_client;
 
 	uint32_t display_num_of_h_tiles;
@@ -234,7 +241,7 @@ struct sde_encoder_virt {
 	struct mutex enc_lock;
 	DECLARE_BITMAP(frame_busy_mask, MAX_PHYS_ENCODERS_PER_VIRTUAL);
 	void (*crtc_frame_event_cb)(void *, u32 event);
-	void *crtc_frame_event_cb_data;
+	struct sde_crtc_frame_event_cb_data crtc_frame_event_cb_data;
 
 	struct timer_list vsync_event_timer;
 
@@ -244,7 +251,7 @@ struct sde_encoder_virt {
 	bool misr_enable;
 	u32 misr_frame_count;
 
-	bool idle_pc_supported;
+	bool idle_pc_enabled;
 	struct mutex rc_lock;
 	enum sde_enc_rc_states rc_state;
 	struct kthread_delayed_work delayed_off_work;
@@ -414,6 +421,14 @@ bool sde_encoder_is_dsc_merge(struct drm_encoder *drm_enc)
 		return true;
 
 	return false;
+}
+
+int sde_encoder_in_clone_mode(struct drm_encoder *drm_enc)
+{
+	struct sde_encoder_virt *sde_enc = to_sde_encoder_virt(drm_enc);
+
+	return sde_enc && sde_enc->cur_master &&
+		sde_enc->cur_master->in_clone_mode;
 }
 
 static inline int _sde_encoder_power_enable(struct sde_encoder_virt *sde_enc,
@@ -724,8 +739,8 @@ void sde_encoder_destroy(struct drm_encoder *drm_enc)
 	mutex_destroy(&sde_enc->enc_lock);
 
 	if (sde_enc->input_handler) {
-		input_unregister_handler(sde_enc->input_handler);
 		kfree(sde_enc->input_handler);
+		sde_enc->input_handler = NULL;
 	}
 
 	kfree(sde_enc);
@@ -1475,12 +1490,13 @@ static void _sde_encoder_update_vsync_source(struct sde_encoder_virt *sde_enc,
 
 		vsync_cfg.pp_count = sde_enc->num_phys_encs;
 		vsync_cfg.frame_rate = mode_info.frame_rate;
+		vsync_cfg.vsync_source =
+			sde_enc->cur_master->hw_pp->caps->te_source;
 		if (is_dummy)
 			vsync_cfg.vsync_source = SDE_VSYNC_SOURCE_WD_TIMER_1;
 		else if (disp_info->is_te_using_watchdog_timer)
 			vsync_cfg.vsync_source = SDE_VSYNC_SOURCE_WD_TIMER_0;
-		else
-			vsync_cfg.vsync_source = SDE_VSYNC0_SOURCE_GPIO;
+
 		vsync_cfg.is_dummy = is_dummy;
 
 		hw_mdptop->ops.setup_vsync_source(hw_mdptop, &vsync_cfg);
@@ -1586,11 +1602,16 @@ static int _sde_encoder_update_rsc_client(
 	 * only primary command mode panel can request CMD state.
 	 * all other panels/displays can request for VID state including
 	 * secondary command mode panel.
+	 * Clone mode encoder can request CLK STATE only.
 	 */
-	rsc_state = enable ?
-		(((disp_info->capabilities & MSM_DISPLAY_CAP_CMD_MODE) &&
-		  disp_info->is_primary) ? SDE_RSC_CMD_STATE :
-		SDE_RSC_VID_STATE) : SDE_RSC_IDLE_STATE;
+	if (sde_encoder_in_clone_mode(drm_enc))
+		rsc_state = enable ? SDE_RSC_CLK_STATE : SDE_RSC_IDLE_STATE;
+	else
+		rsc_state = enable ?
+			(((disp_info->capabilities & MSM_DISPLAY_CAP_CMD_MODE)
+			  && disp_info->is_primary) ? SDE_RSC_CMD_STATE :
+			 SDE_RSC_VID_STATE) : SDE_RSC_IDLE_STATE;
+
 	prefill_lines = config ? mode_info.prefill_lines +
 		config->inline_rotate_prefill : mode_info.prefill_lines;
 
@@ -1868,7 +1889,7 @@ static void sde_encoder_input_event_handler(struct input_handle *handle,
 {
 	struct drm_encoder *drm_enc = NULL;
 	struct sde_encoder_virt *sde_enc = NULL;
-	struct msm_drm_thread *disp_thread = NULL;
+	struct msm_drm_thread *event_thread = NULL;
 	struct msm_drm_private *priv = NULL;
 
 	if (!handle || !handle->handler || !handle->handler->private) {
@@ -1885,7 +1906,7 @@ static void sde_encoder_input_event_handler(struct input_handle *handle,
 	priv = drm_enc->dev->dev_private;
 	sde_enc = to_sde_encoder_virt(drm_enc);
 	if (!sde_enc->crtc || (sde_enc->crtc->index
-			>= ARRAY_SIZE(priv->disp_thread))) {
+			>= ARRAY_SIZE(priv->event_thread))) {
 		SDE_DEBUG_ENC(sde_enc,
 			"invalid cached CRTC: %d or crtc index: %d\n",
 			sde_enc->crtc == NULL,
@@ -1895,12 +1916,32 @@ static void sde_encoder_input_event_handler(struct input_handle *handle,
 
 	SDE_EVT32_VERBOSE(DRMID(drm_enc));
 
-	disp_thread = &priv->disp_thread[sde_enc->crtc->index];
+	event_thread = &priv->event_thread[sde_enc->crtc->index];
 
-	kthread_queue_work(&disp_thread->worker,
+	/* Queue input event work to event thread */
+	kthread_queue_work(&event_thread->worker,
 				&sde_enc->input_event_work);
 }
 
+void sde_encoder_control_idle_pc(struct drm_encoder *drm_enc, bool enable)
+{
+	struct sde_encoder_virt *sde_enc;
+
+	if (!drm_enc) {
+		SDE_ERROR("invalid encoder\n");
+		return;
+	}
+	sde_enc = to_sde_encoder_virt(drm_enc);
+
+	/* return early if there is no state change */
+	if (sde_enc->idle_pc_enabled == enable)
+		return;
+
+	sde_enc->idle_pc_enabled = enable;
+
+	SDE_DEBUG("idle-pc state:%d\n", sde_enc->idle_pc_enabled);
+	SDE_EVT32(sde_enc->idle_pc_enabled);
+}
 
 static int sde_encoder_resource_control(struct drm_encoder *drm_enc,
 		u32 sw_event)
@@ -1927,7 +1968,7 @@ static int sde_encoder_resource_control(struct drm_encoder *drm_enc,
 	 * when idle_pc is not supported, process only KICKOFF, STOP and MODESET
 	 * events and return early for other events (ie wb display).
 	 */
-	if (!sde_enc->idle_pc_supported &&
+	if (!sde_enc->idle_pc_enabled &&
 			(sw_event != SDE_ENC_RC_EVENT_KICKOFF &&
 			sw_event != SDE_ENC_RC_EVENT_PRE_MODESET &&
 			sw_event != SDE_ENC_RC_EVENT_POST_MODESET &&
@@ -1935,9 +1976,9 @@ static int sde_encoder_resource_control(struct drm_encoder *drm_enc,
 			sw_event != SDE_ENC_RC_EVENT_PRE_STOP))
 		return 0;
 
-	SDE_DEBUG_ENC(sde_enc, "sw_event:%d, idle_pc_supported:%d\n", sw_event,
-			sde_enc->idle_pc_supported);
-	SDE_EVT32_VERBOSE(DRMID(drm_enc), sw_event, sde_enc->idle_pc_supported,
+	SDE_DEBUG_ENC(sde_enc, "sw_event:%d, idle_pc:%d\n",
+			sw_event, sde_enc->idle_pc_enabled);
+	SDE_EVT32_VERBOSE(DRMID(drm_enc), sw_event, sde_enc->idle_pc_enabled,
 			sde_enc->rc_state, SDE_EVTLOG_FUNC_ENTRY);
 
 	switch (sw_event) {
@@ -2301,10 +2342,17 @@ static int sde_encoder_resource_control(struct drm_encoder *drm_enc,
 			_sde_encoder_resource_control_rsc_update(drm_enc, true);
 			_sde_encoder_resource_control_helper(drm_enc, true);
 
+			/*
+			 * In some cases, commit comes with slight delay
+			 * (> 80 ms)after early wake up, prevent clock switch
+			 * off to avoid jank in next update. So, increase the
+			 * command mode idle timeout sufficiently to prevent
+			 * such case.
+			 */
 			kthread_mod_delayed_work(&disp_thread->worker,
-						&sde_enc->delayed_off_work,
-						msecs_to_jiffies(
-						IDLE_POWERCOLLAPSE_DURATION));
+					&sde_enc->delayed_off_work,
+					msecs_to_jiffies(
+					IDLE_POWERCOLLAPSE_IN_EARLY_WAKEUP));
 
 			sde_enc->rc_state = SDE_ENC_RC_STATE_ON;
 		}
@@ -2320,7 +2368,7 @@ static int sde_encoder_resource_control(struct drm_encoder *drm_enc,
 		break;
 	}
 
-	SDE_EVT32_VERBOSE(DRMID(drm_enc), sw_event, sde_enc->idle_pc_supported,
+	SDE_EVT32_VERBOSE(DRMID(drm_enc), sw_event, sde_enc->idle_pc_enabled,
 			sde_enc->rc_state, SDE_EVTLOG_FUNC_EXIT);
 	return 0;
 }
@@ -2484,6 +2532,109 @@ void sde_encoder_control_te(struct drm_encoder *drm_enc, bool enable)
 	}
 }
 
+static int _sde_encoder_input_connect(struct input_handler *handler,
+	struct input_dev *dev, const struct input_device_id *id)
+{
+	struct input_handle *handle;
+	int rc = 0;
+
+	handle = kzalloc(sizeof(*handle), GFP_KERNEL);
+	if (!handle)
+		return -ENOMEM;
+
+	handle->dev = dev;
+	handle->handler = handler;
+	handle->name = handler->name;
+
+	rc = input_register_handle(handle);
+	if (rc) {
+		pr_err("failed to register input handle\n");
+		goto error;
+	}
+
+	rc = input_open_device(handle);
+	if (rc) {
+		pr_err("failed to open input device\n");
+		goto error_unregister;
+	}
+
+	return 0;
+
+error_unregister:
+	input_unregister_handle(handle);
+
+error:
+	kfree(handle);
+
+	return rc;
+}
+
+static void _sde_encoder_input_disconnect(struct input_handle *handle)
+{
+	 input_close_device(handle);
+	 input_unregister_handle(handle);
+	 kfree(handle);
+}
+
+/**
+ * Structure for specifying event parameters on which to receive callbacks.
+ * This structure will trigger a callback in case of a touch event (specified by
+ * EV_ABS) where there is a change in X and Y coordinates,
+ */
+static const struct input_device_id sde_input_ids[] = {
+	{
+		.flags = INPUT_DEVICE_ID_MATCH_EVBIT,
+		.evbit = { BIT_MASK(EV_ABS) },
+		.absbit = { [BIT_WORD(ABS_MT_POSITION_X)] =
+					BIT_MASK(ABS_MT_POSITION_X) |
+					BIT_MASK(ABS_MT_POSITION_Y) },
+	},
+	{ },
+};
+
+static int _sde_encoder_input_handler_register(
+		struct input_handler *input_handler)
+{
+	int rc = 0;
+
+	rc = input_register_handler(input_handler);
+	if (rc) {
+		pr_err("input_register_handler failed, rc= %d\n", rc);
+		kfree(input_handler);
+		return rc;
+	}
+
+	return rc;
+}
+
+static int _sde_encoder_input_handler(
+		struct sde_encoder_virt *sde_enc)
+{
+	struct input_handler *input_handler = NULL;
+	int rc = 0;
+
+	if (sde_enc->input_handler) {
+		SDE_ERROR_ENC(sde_enc,
+				"input_handle is active. unexpected\n");
+		return -EINVAL;
+	}
+
+	input_handler = kzalloc(sizeof(*sde_enc->input_handler), GFP_KERNEL);
+	if (!input_handler)
+		return -ENOMEM;
+
+	input_handler->event = sde_encoder_input_event_handler;
+	input_handler->connect = _sde_encoder_input_connect;
+	input_handler->disconnect = _sde_encoder_input_disconnect;
+	input_handler->name = "sde";
+	input_handler->id_table = sde_input_ids;
+	input_handler->private = sde_enc;
+
+	sde_enc->input_handler = input_handler;
+
+	return rc;
+}
+
 static void _sde_encoder_virt_enable_helper(struct drm_encoder *drm_enc)
 {
 	struct sde_encoder_virt *sde_enc = NULL;
@@ -2601,6 +2752,14 @@ static void sde_encoder_virt_enable(struct drm_encoder *drm_enc)
 		return;
 	}
 
+	if (sde_enc->input_handler) {
+		ret = _sde_encoder_input_handler_register(
+				sde_enc->input_handler);
+		if (ret)
+			SDE_ERROR(
+			"input handler registration failed, rc = %d\n", ret);
+	}
+
 	ret = sde_encoder_resource_control(drm_enc, SDE_ENC_RC_EVENT_KICKOFF);
 	if (ret) {
 		SDE_ERROR_ENC(sde_enc, "sde resource control failed: %d\n",
@@ -2648,7 +2807,6 @@ static void sde_encoder_virt_disable(struct drm_encoder *drm_enc)
 	struct sde_encoder_virt *sde_enc = NULL;
 	struct msm_drm_private *priv;
 	struct sde_kms *sde_kms;
-	struct drm_connector *drm_conn = NULL;
 	enum sde_intf_mode intf_mode;
 	int i = 0;
 
@@ -2677,12 +2835,13 @@ static void sde_encoder_virt_disable(struct drm_encoder *drm_enc)
 
 	SDE_EVT32(DRMID(drm_enc));
 
-	/* Disable ESD thread */
-	drm_conn = sde_enc->cur_master->connector;
-	sde_connector_schedule_status_work(drm_conn, false);
+	if (sde_enc->input_handler)
+		input_unregister_handler(sde_enc->input_handler);
 
 	/* wait for idle */
 	sde_encoder_wait_for_event(drm_enc, MSM_ENC_TX_COMPLETE);
+
+	kthread_flush_work(&sde_enc->input_event_work);
 
 	/*
 	 * For primary command mode encoders, execute the resource control
@@ -2838,8 +2997,8 @@ void sde_encoder_register_vblank_callback(struct drm_encoder *drm_enc,
 }
 
 void sde_encoder_register_frame_event_callback(struct drm_encoder *drm_enc,
-		void (*frame_event_cb)(void *, u32 event),
-		void *frame_event_cb_data)
+			void (*frame_event_cb)(void *, u32 event),
+			struct drm_crtc *crtc)
 {
 	struct sde_encoder_virt *sde_enc = to_sde_encoder_virt(drm_enc);
 	unsigned long lock_flags;
@@ -2856,7 +3015,7 @@ void sde_encoder_register_frame_event_callback(struct drm_encoder *drm_enc,
 
 	spin_lock_irqsave(&sde_enc->enc_spinlock, lock_flags);
 	sde_enc->crtc_frame_event_cb = frame_event_cb;
-	sde_enc->crtc_frame_event_cb_data = frame_event_cb_data;
+	sde_enc->crtc_frame_event_cb_data.crtc = crtc;
 	spin_unlock_irqrestore(&sde_enc->enc_spinlock, lock_flags);
 }
 
@@ -2866,6 +3025,9 @@ static void sde_encoder_frame_done_callback(
 {
 	struct sde_encoder_virt *sde_enc = to_sde_encoder_virt(drm_enc);
 	unsigned int i;
+
+	sde_enc->crtc_frame_event_cb_data.connector =
+				sde_enc->cur_master->connector;
 
 	if (event & (SDE_ENCODER_FRAME_EVENT_DONE
 			| SDE_ENCODER_FRAME_EVENT_ERROR
@@ -2895,13 +3057,13 @@ static void sde_encoder_frame_done_callback(
 
 			if (sde_enc->crtc_frame_event_cb)
 				sde_enc->crtc_frame_event_cb(
-					sde_enc->crtc_frame_event_cb_data,
+					&sde_enc->crtc_frame_event_cb_data,
 					event);
 		}
 	} else {
 		if (sde_enc->crtc_frame_event_cb)
 			sde_enc->crtc_frame_event_cb(
-				sde_enc->crtc_frame_event_cb_data, event);
+				&sde_enc->crtc_frame_event_cb_data, event);
 	}
 }
 
@@ -3009,6 +3171,10 @@ static inline void _sde_encoder_trigger_start(struct sde_encoder_phys *phys)
 		SDE_ERROR("invalid pingpong hw\n");
 		return;
 	}
+
+	/* avoid ctrl start for encoder in clone mode */
+	if (phys->in_clone_mode)
+		return;
 
 	ctl = phys->hw_ctl;
 	if (phys->split_role == ENC_ROLE_SKIP) {
@@ -3402,13 +3568,14 @@ void sde_encoder_trigger_kickoff_pending(struct drm_encoder *drm_enc)
 static void _sde_encoder_setup_dither(struct sde_encoder_phys *phys)
 {
 	void *dither_cfg;
-	int ret = 0, rc;
+	int ret = 0, rc, i = 0;
 	size_t len = 0;
 	enum sde_rm_topology_name topology;
 	struct drm_encoder *drm_enc;
 	struct msm_mode_info mode_info;
 	struct msm_display_dsc_info *dsc = NULL;
 	struct sde_encoder_virt *sde_enc;
+	struct sde_hw_pingpong *hw_pp;
 
 	if (!phys || !phys->connector || !phys->hw_pp ||
 			!phys->hw_pp->ops.setup_dither || !phys->parent)
@@ -3431,12 +3598,24 @@ static void _sde_encoder_setup_dither(struct sde_encoder_phys *phys)
 	/* disable dither for 10 bpp or 10bpc dsc config */
 	if (dsc->bpp == 10 || dsc->bpc == 10) {
 		phys->hw_pp->ops.setup_dither(phys->hw_pp, NULL, 0);
+		return;
+	}
+
+	ret = sde_connector_get_dither_cfg(phys->connector,
+			phys->connector->state, &dither_cfg, &len);
+	if (ret)
+		return;
+
+	if (TOPOLOGY_DUALPIPE_MERGE_MODE(topology)) {
+		for (i = 0; i < MAX_CHANNELS_PER_ENC; i++) {
+			hw_pp = sde_enc->hw_pp[i];
+			if (hw_pp) {
+				phys->hw_pp->ops.setup_dither(hw_pp, dither_cfg,
+								len);
+			}
+		}
 	} else {
-		ret = sde_connector_get_dither_cfg(phys->connector,
-				phys->connector->state, &dither_cfg, &len);
-		if (!ret)
-			phys->hw_pp->ops.setup_dither(phys->hw_pp,
-				dither_cfg, len);
+		phys->hw_pp->ops.setup_dither(phys->hw_pp, dither_cfg, len);
 	}
 }
 
@@ -3590,102 +3769,6 @@ static void sde_encoder_input_event_work_handler(struct kthread_work *work)
 
 	sde_encoder_resource_control(&sde_enc->base,
 			SDE_ENC_RC_EVENT_EARLY_WAKEUP);
-}
-
-static int _sde_encoder_input_connect(struct input_handler *handler,
-	struct input_dev *dev, const struct input_device_id *id)
-{
-	struct input_handle *handle;
-	int rc = 0;
-
-	handle = kzalloc(sizeof(*handle), GFP_KERNEL);
-	if (!handle)
-		return -ENOMEM;
-
-	handle->dev = dev;
-	handle->handler = handler;
-	handle->name = handler->name;
-
-	rc = input_register_handle(handle);
-	if (rc) {
-		pr_err("failed to register input handle\n");
-		goto error;
-	}
-
-	rc = input_open_device(handle);
-	if (rc) {
-		pr_err("failed to open input device\n");
-		goto error_unregister;
-	}
-
-	return 0;
-
-error_unregister:
-	input_unregister_handle(handle);
-
-error:
-	kfree(handle);
-
-	return rc;
-}
-
-static void _sde_encoder_input_disconnect(struct input_handle *handle)
-{
-	 input_close_device(handle);
-	 input_unregister_handle(handle);
-	 kfree(handle);
-}
-
-/**
- * Structure for specifying event parameters on which to receive callbacks.
- * This structure will trigger a callback in case of a touch event (specified by
- * EV_ABS) where there is a change in X and Y coordinates,
- */
-static const struct input_device_id sde_input_ids[] = {
-	{
-		.flags = INPUT_DEVICE_ID_MATCH_EVBIT,
-		.evbit = { BIT_MASK(EV_ABS) },
-		.absbit = { [BIT_WORD(ABS_MT_POSITION_X)] =
-					BIT_MASK(ABS_MT_POSITION_X) |
-					BIT_MASK(ABS_MT_POSITION_Y) },
-	},
-	{ },
-};
-
-static int _sde_encoder_input_handler(
-		struct sde_encoder_virt *sde_enc)
-{
-	struct input_handler *input_handler = NULL;
-	int rc = 0;
-
-	if (sde_enc->input_handler) {
-		SDE_ERROR_ENC(sde_enc,
-				"input_handle is active. unexpected\n");
-		return -EINVAL;
-	}
-
-	input_handler = kzalloc(sizeof(*sde_enc->input_handler), GFP_KERNEL);
-	if (!input_handler)
-		return -ENOMEM;
-
-	input_handler->event = sde_encoder_input_event_handler;
-	input_handler->connect = _sde_encoder_input_connect;
-	input_handler->disconnect = _sde_encoder_input_disconnect;
-	input_handler->name = "sde";
-	input_handler->id_table = sde_input_ids;
-	input_handler->private = sde_enc;
-
-	rc = input_register_handler(input_handler);
-	if (rc) {
-		SDE_ERROR_ENC(sde_enc,
-			"input_register_handler failed, rc= %d\n", rc);
-		kfree(input_handler);
-		return rc;
-	}
-
-	sde_enc->input_handler = input_handler;
-
-	return rc;
 }
 
 static void sde_encoder_vsync_event_work_handler(struct kthread_work *work)
@@ -3945,6 +4028,7 @@ void sde_encoder_kickoff(struct drm_encoder *drm_enc, bool is_error)
 	}
 
 	if (sde_enc->disp_info.intf_type == DRM_MODE_CONNECTOR_DSI &&
+			sde_enc->disp_info.is_primary &&
 			!_sde_encoder_wakeup_time(drm_enc, &wakeup_time)) {
 		SDE_EVT32_VERBOSE(ktime_to_ms(wakeup_time));
 		mod_timer(&sde_enc->vsync_event_timer,
@@ -4388,6 +4472,7 @@ static int sde_encoder_setup_display(struct sde_encoder_virt *sde_enc,
 	phys_params.parent = &sde_enc->base;
 	phys_params.parent_ops = parent_ops;
 	phys_params.enc_spinlock = &sde_enc->enc_spinlock;
+	phys_params.vblank_ctl_lock = &sde_enc->vblank_ctl_lock;
 
 	SDE_DEBUG("\n");
 
@@ -4416,7 +4501,7 @@ static int sde_encoder_setup_display(struct sde_encoder_virt *sde_enc,
 
 	if ((disp_info->capabilities & MSM_DISPLAY_CAP_CMD_MODE) ||
 	    (disp_info->capabilities & MSM_DISPLAY_CAP_VID_MODE))
-		sde_enc->idle_pc_supported = sde_kms->catalog->has_idle_pc;
+		sde_enc->idle_pc_enabled = sde_kms->catalog->has_idle_pc;
 
 	mutex_lock(&sde_enc->enc_lock);
 	for (i = 0; i < disp_info->num_of_h_tiles && !ret; i++) {
@@ -4530,6 +4615,7 @@ struct drm_encoder *sde_encoder_init(
 
 	sde_enc->cur_master = NULL;
 	spin_lock_init(&sde_enc->enc_spinlock);
+	mutex_init(&sde_enc->vblank_ctl_lock);
 	drm_enc = &sde_enc->base;
 	drm_encoder_init(dev, drm_enc, &sde_encoder_funcs, drm_enc_mode, NULL);
 	drm_encoder_helper_add(drm_enc, &sde_encoder_helper_funcs);
@@ -4835,7 +4921,7 @@ int sde_encoder_update_caps_for_cont_splash(struct drm_encoder *encoder)
 
 int sde_encoder_display_failure_notification(struct drm_encoder *enc)
 {
-	struct msm_drm_thread *disp_thread = NULL;
+	struct msm_drm_thread *event_thread = NULL;
 	struct msm_drm_private *priv = NULL;
 	struct sde_encoder_virt *sde_enc = NULL;
 
@@ -4847,7 +4933,7 @@ int sde_encoder_display_failure_notification(struct drm_encoder *enc)
 	priv = enc->dev->dev_private;
 	sde_enc = to_sde_encoder_virt(enc);
 	if (!sde_enc->crtc || (sde_enc->crtc->index
-			>= ARRAY_SIZE(priv->disp_thread))) {
+			>= ARRAY_SIZE(priv->event_thread))) {
 		SDE_DEBUG_ENC(sde_enc,
 			"invalid cached CRTC: %d or crtc index: %d\n",
 			sde_enc->crtc == NULL,
@@ -4857,11 +4943,12 @@ int sde_encoder_display_failure_notification(struct drm_encoder *enc)
 
 	SDE_EVT32_VERBOSE(DRMID(enc));
 
-	disp_thread = &priv->disp_thread[sde_enc->crtc->index];
+	event_thread = &priv->event_thread[sde_enc->crtc->index];
 
-	kthread_queue_work(&disp_thread->worker,
-				&sde_enc->esd_trigger_work);
+	kthread_queue_work(&event_thread->worker,
+			   &sde_enc->esd_trigger_work);
 	kthread_flush_work(&sde_enc->esd_trigger_work);
+
 	/**
 	 * panel may stop generating te signal (vsync) during esd failure. rsc
 	 * hardware may hang without vsync. Avoid rsc hang by generating the

@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2016, 2018 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -631,6 +631,18 @@ static void smbchg_relax(struct smbchg_chip *chip, int reason)
 	chip->wake_reasons = reasons;
 	mutex_unlock(&chip->pm_lock);
 };
+
+static bool is_bms_psy_present(struct smbchg_chip *chip)
+{
+	if (chip->bms_psy)
+		return true;
+
+	if (chip->bms_psy_name)
+		chip->bms_psy = power_supply_get_by_name(
+					(char *)chip->bms_psy_name);
+
+	return chip->bms_psy ? true : false;
+}
 
 enum pwr_path_type {
 	UNKNOWN = 0,
@@ -1518,6 +1530,47 @@ static struct power_supply *get_parallel_psy(struct smbchg_chip *chip)
 	if (!chip->parallel.psy)
 		pr_smb(PR_STATUS, "parallel charger not found\n");
 	return chip->parallel.psy;
+}
+
+static int smbchg_request_dpdm(struct smbchg_chip *chip, bool enable)
+{
+	int rc = 0;
+
+	/* fetch the DPDM regulator */
+	if (!chip->dpdm_reg && of_get_property(chip->dev->of_node,
+				"dpdm-supply", NULL)) {
+		chip->dpdm_reg = devm_regulator_get(chip->dev, "dpdm");
+		if (IS_ERR(chip->dpdm_reg)) {
+			rc = PTR_ERR(chip->dpdm_reg);
+			dev_err(chip->dev, "Couldn't get dpdm regulator rc=%d\n",
+					rc);
+			chip->dpdm_reg = NULL;
+			return rc;
+		}
+	}
+
+	if (!chip->dpdm_reg)
+		return -ENODEV;
+
+	if (enable) {
+		if (!regulator_is_enabled(chip->dpdm_reg)) {
+			pr_smb(PR_STATUS, "enabling DPDM regulator\n");
+			rc = regulator_enable(chip->dpdm_reg);
+			if (rc < 0)
+				dev_err(chip->dev, "Couldn't enable dpdm regulator rc=%d\n",
+					rc);
+		}
+	} else {
+		if (regulator_is_enabled(chip->dpdm_reg)) {
+			pr_smb(PR_STATUS, "disabling DPDM regulator\n");
+			rc = regulator_disable(chip->dpdm_reg);
+			if (rc < 0)
+				dev_err(chip->dev, "Couldn't disable dpdm regulator rc=%d\n",
+					rc);
+		}
+	}
+
+	return rc;
 }
 
 static void smbchg_usb_update_online_work(struct work_struct *work)
@@ -3707,17 +3760,11 @@ static void check_battery_type(struct smbchg_chip *chip)
 static void smbchg_external_power_changed(struct power_supply *psy)
 {
 	struct smbchg_chip *chip = power_supply_get_drvdata(psy);
-	union power_supply_propval prop = {0,};
-	int rc, current_limit = 0, soc;
-	enum power_supply_type usb_supply_type;
-	char *usb_type_name = "null";
-
-	if (chip->bms_psy_name)
-		chip->bms_psy =
-			power_supply_get_by_name((char *)chip->bms_psy_name);
+	int rc, soc;
 
 	smbchg_aicl_deglitch_wa_check(chip);
-	if (chip->bms_psy) {
+
+	if (is_bms_psy_present(chip)) {
 		check_battery_type(chip);
 		soc = get_prop_batt_capacity(chip);
 		if (chip->previous_soc != soc) {
@@ -3732,37 +3779,8 @@ static void smbchg_external_power_changed(struct power_supply *psy)
 									rc);
 	}
 
-	rc = power_supply_get_property(chip->usb_psy,
-				POWER_SUPPLY_PROP_CHARGING_ENABLED, &prop);
-	if (rc == 0)
-		vote(chip->usb_suspend_votable, POWER_SUPPLY_EN_VOTER,
-				!prop.intval, 0);
-
-	current_limit = chip->usb_current_max / 1000;
-
-	/* Override if type-c charger used */
-	if (chip->typec_current_ma > 500 &&
-			current_limit < chip->typec_current_ma)
-		current_limit = chip->typec_current_ma;
-
-	read_usb_type(chip, &usb_type_name, &usb_supply_type);
-
-	if (usb_supply_type != POWER_SUPPLY_TYPE_USB)
-		goto  skip_current_for_non_sdp;
-
-	pr_smb(PR_MISC, "usb type = %s current_limit = %d\n",
-			usb_type_name, current_limit);
-
-	rc = vote(chip->usb_icl_votable, PSY_ICL_VOTER, true,
-				current_limit);
-	if (rc < 0)
-		pr_err("Couldn't update USB PSY ICL vote rc=%d\n", rc);
-
-skip_current_for_non_sdp:
+	/* adjust vfloat */
 	smbchg_vfloat_adjust_check(chip);
-
-	if (chip->batt_psy)
-		power_supply_changed(chip->batt_psy);
 }
 
 static int smbchg_otg_regulator_enable(struct regulator_dev *rdev)
@@ -4590,8 +4608,11 @@ static int set_usb_psy_dp_dm(struct smbchg_chip *chip, int state)
 	if (!rc && !(reg & USBIN_UV_BIT) && !(reg & USBIN_SRC_DET_BIT)) {
 		pr_smb(PR_MISC, "overwriting state = %d with %d\n",
 				state, POWER_SUPPLY_DP_DM_DPF_DMF);
-		if (chip->dpdm_reg && !regulator_is_enabled(chip->dpdm_reg))
-			return regulator_enable(chip->dpdm_reg);
+		rc = smbchg_request_dpdm(chip, true);
+		if (rc < 0) {
+			pr_err("Couldn't enable DP/DM for pulsing rc=%d\n", rc);
+			return rc;
+		}
 	}
 	pr_smb(PR_MISC, "setting usb psy dp dm = %d\n", state);
 	pval.intval = state;
@@ -4697,8 +4718,7 @@ static void handle_usb_removal(struct smbchg_chip *chip)
 	smbchg_relax(chip, PM_DETECT_HVDCP);
 	smbchg_change_usb_supply_type(chip, POWER_SUPPLY_TYPE_UNKNOWN);
 	extcon_set_cable_state_(chip->extcon, EXTCON_USB, chip->usb_present);
-	if (chip->dpdm_reg)
-		regulator_disable(chip->dpdm_reg);
+	smbchg_request_dpdm(chip, false);
 	schedule_work(&chip->usb_set_online_work);
 
 	pr_smb(PR_MISC, "setting usb psy health UNKNOWN\n");
@@ -5248,8 +5268,7 @@ static int smbchg_unprepare_for_pulsing(struct smbchg_chip *chip)
 {
 	int rc = 0;
 
-	if (chip->dpdm_reg && !regulator_is_enabled(chip->dpdm_reg))
-		rc = regulator_enable(chip->dpdm_reg);
+	rc = smbchg_request_dpdm(chip, true);
 	if (rc < 0) {
 		pr_err("Couldn't enable DP/DM for pulsing rc=%d\n", rc);
 		return rc;
@@ -5712,6 +5731,21 @@ static void update_typec_otg_status(struct smbchg_chip *chip, int mode,
 	}
 }
 
+static int smbchg_set_sdp_current(struct smbchg_chip *chip, int current_ma)
+{
+	if (chip->usb_supply_type == POWER_SUPPLY_TYPE_USB) {
+		/* Override if type-c charger used */
+		if (chip->typec_current_ma > 500 &&
+				current_ma < chip->typec_current_ma) {
+			current_ma = chip->typec_current_ma;
+		}
+		pr_smb(PR_MISC, "from USB current_ma = %d\n", current_ma);
+		vote(chip->usb_icl_votable, PSY_ICL_VOTER, true, current_ma);
+	}
+
+	return 0;
+}
+
 static int smbchg_usb_get_property(struct power_supply *psy,
 				  enum power_supply_property psp,
 				  union power_supply_propval *val)
@@ -5720,7 +5754,12 @@ static int smbchg_usb_get_property(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
-		val->intval = chip->usb_current_max;
+	case POWER_SUPPLY_PROP_SDP_CURRENT_MAX:
+		if (chip->usb_icl_votable)
+			val->intval = get_client_vote(chip->usb_icl_votable,
+						PSY_ICL_VOTER) * 1000;
+		else
+			val->intval = 0;
 		break;
 	case POWER_SUPPLY_PROP_PRESENT:
 		val->intval = chip->usb_present;
@@ -5750,17 +5789,16 @@ static int smbchg_usb_set_property(struct power_supply *psy,
 	struct smbchg_chip *chip = power_supply_get_drvdata(psy);
 
 	switch (psp) {
-	case POWER_SUPPLY_PROP_CURRENT_MAX:
-		chip->usb_current_max = val->intval;
-		break;
 	case POWER_SUPPLY_PROP_ONLINE:
 		chip->usb_online = val->intval;
 		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+	case POWER_SUPPLY_PROP_SDP_CURRENT_MAX:
+		smbchg_set_sdp_current(chip, val->intval / 1000);
 	default:
 		return -EINVAL;
 	}
 
-	power_supply_changed(psy);
 	return 0;
 }
 
@@ -5770,6 +5808,7 @@ smbchg_usb_is_writeable(struct power_supply *psy,
 {
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
+	case POWER_SUPPLY_PROP_SDP_CURRENT_MAX:
 		return 1;
 	default:
 		break;
@@ -5791,6 +5830,7 @@ static enum power_supply_property smbchg_usb_properties[] = {
 	POWER_SUPPLY_PROP_TYPE,
 	POWER_SUPPLY_PROP_REAL_TYPE,
 	POWER_SUPPLY_PROP_HEALTH,
+	POWER_SUPPLY_PROP_SDP_CURRENT_MAX,
 };
 
 #define CHARGE_OUTPUT_VTG_RATIO		840
@@ -6481,8 +6521,7 @@ static irqreturn_t usbin_uv_handler(int irq, void *_chip)
 	 */
 	if (!(reg & USBIN_UV_BIT) && !(reg & USBIN_SRC_DET_BIT)) {
 		pr_smb(PR_MISC, "setting usb dp=f dm=f\n");
-		if (chip->dpdm_reg && !regulator_is_enabled(chip->dpdm_reg))
-			rc = regulator_enable(chip->dpdm_reg);
+		rc = smbchg_request_dpdm(chip, true);
 		if (rc < 0) {
 			pr_err("Couldn't enable DP/DM for pulsing rc=%d\n", rc);
 			return rc;
@@ -6731,15 +6770,8 @@ static int determine_initial_status(struct smbchg_chip *chip)
 	chip->dc_present = is_dc_present(chip);
 
 	if (chip->usb_present) {
-		int rc = 0;
-
 		pr_smb(PR_MISC, "setting usb dp=f dm=f\n");
-		if (chip->dpdm_reg && !regulator_is_enabled(chip->dpdm_reg))
-			rc = regulator_enable(chip->dpdm_reg);
-		if (rc < 0) {
-			pr_err("Couldn't enable DP/DM for pulsing rc=%d\n", rc);
-			return rc;
-		}
+		smbchg_request_dpdm(chip, true);
 		handle_usb_insertion(chip);
 	} else {
 		handle_usb_removal(chip);
@@ -7651,19 +7683,19 @@ static int smb_parse_dt(struct smbchg_chip *chip)
 #define SMBCHG_LITE_MISC_SUBTYPE	0x57
 static int smbchg_request_irq(struct smbchg_chip *chip,
 				struct device_node *child,
-				int irq_num, char *irq_name,
+				int *irq_num, char *irq_name,
 				irqreturn_t (irq_handler)(int irq, void *_chip),
 				int flags)
 {
 	int rc;
 
-	irq_num = of_irq_get_byname(child, irq_name);
-	if (irq_num < 0) {
+	*irq_num = of_irq_get_byname(child, irq_name);
+	if (*irq_num < 0) {
 		dev_err(chip->dev, "Unable to get %s irqn", irq_name);
 		rc = -ENXIO;
 	}
 	rc = devm_request_threaded_irq(chip->dev,
-			irq_num, NULL, irq_handler, flags, irq_name,
+			*irq_num, NULL, irq_handler, flags, irq_name,
 			chip);
 	if (rc < 0) {
 		dev_err(chip->dev, "Unable to request %s irq: %dn",
@@ -7705,26 +7737,28 @@ static int smbchg_request_irqs(struct smbchg_chip *chip)
 		case SMBCHG_CHGR_SUBTYPE:
 		case SMBCHG_LITE_CHGR_SUBTYPE:
 			rc = smbchg_request_irq(chip, child,
-				chip->chg_error_irq, "chg-error",
+				&chip->chg_error_irq, "chg-error",
 				chg_error_handler, flags);
 			if (rc < 0)
 				return rc;
-			rc = smbchg_request_irq(chip, child, chip->taper_irq,
+			rc = smbchg_request_irq(chip, child, &chip->taper_irq,
 				"chg-taper-thr", taper_handler,
 				(IRQF_TRIGGER_RISING | IRQF_ONESHOT));
 			if (rc < 0)
 				return rc;
 			disable_irq_nosync(chip->taper_irq);
-			rc = smbchg_request_irq(chip, child, chip->chg_term_irq,
+			rc = smbchg_request_irq(chip, child,
+				&chip->chg_term_irq,
 				"chg-tcc-thr", chg_term_handler,
 				(IRQF_TRIGGER_RISING | IRQF_ONESHOT));
 			if (rc < 0)
 				return rc;
-			rc = smbchg_request_irq(chip, child, chip->recharge_irq,
+			rc = smbchg_request_irq(chip, child,
+				&chip->recharge_irq,
 				"chg-rechg-thr", recharge_handler, flags);
 			if (rc < 0)
 				return rc;
-			rc = smbchg_request_irq(chip, child, chip->fastchg_irq,
+			rc = smbchg_request_irq(chip, child, &chip->fastchg_irq,
 				"chg-p2f-thr", fastchg_handler, flags);
 			if (rc < 0)
 				return rc;
@@ -7734,32 +7768,33 @@ static int smbchg_request_irqs(struct smbchg_chip *chip)
 			break;
 		case SMBCHG_BAT_IF_SUBTYPE:
 		case SMBCHG_LITE_BAT_IF_SUBTYPE:
-			rc = smbchg_request_irq(chip, child, chip->batt_hot_irq,
+			rc = smbchg_request_irq(chip, child,
+				&chip->batt_hot_irq,
 				"batt-hot", batt_hot_handler, flags);
 			if (rc < 0)
 				return rc;
 			rc = smbchg_request_irq(chip, child,
-				chip->batt_warm_irq,
+				&chip->batt_warm_irq,
 				"batt-warm", batt_warm_handler, flags);
 			if (rc < 0)
 				return rc;
 			rc = smbchg_request_irq(chip, child,
-				chip->batt_cool_irq,
+				&chip->batt_cool_irq,
 				"batt-cool", batt_cool_handler, flags);
 			if (rc < 0)
 				return rc;
 			rc = smbchg_request_irq(chip, child,
-				chip->batt_cold_irq,
+				&chip->batt_cold_irq,
 				"batt-cold", batt_cold_handler, flags);
 			if (rc < 0)
 				return rc;
 			rc = smbchg_request_irq(chip, child,
-				chip->batt_missing_irq,
+				&chip->batt_missing_irq,
 				"batt-missing", batt_pres_handler, flags);
 			if (rc < 0)
 				return rc;
 			rc = smbchg_request_irq(chip, child,
-				chip->vbat_low_irq,
+				&chip->vbat_low_irq,
 				"batt-low", vbat_low_handler, flags);
 			if (rc < 0)
 				return rc;
@@ -7774,24 +7809,24 @@ static int smbchg_request_irqs(struct smbchg_chip *chip)
 		case SMBCHG_USB_CHGPTH_SUBTYPE:
 		case SMBCHG_LITE_USB_CHGPTH_SUBTYPE:
 			rc = smbchg_request_irq(chip, child,
-				chip->usbin_uv_irq,
+				&chip->usbin_uv_irq,
 				"usbin-uv", usbin_uv_handler,
 				flags | IRQF_EARLY_RESUME);
 			if (rc < 0)
 				return rc;
 			rc = smbchg_request_irq(chip, child,
-				chip->usbin_ov_irq,
+				&chip->usbin_ov_irq,
 				"usbin-ov", usbin_ov_handler, flags);
 			if (rc < 0)
 				return rc;
 			rc = smbchg_request_irq(chip, child,
-				chip->src_detect_irq,
+				&chip->src_detect_irq,
 				"usbin-src-det",
 				src_detect_handler, flags);
 			if (rc < 0)
 				return rc;
 			rc = smbchg_request_irq(chip, child,
-				chip->aicl_done_irq,
+				&chip->aicl_done_irq,
 				"aicl-done",
 				aicl_done_handler,
 				(IRQF_TRIGGER_RISING | IRQF_ONESHOT));
@@ -7800,18 +7835,18 @@ static int smbchg_request_irqs(struct smbchg_chip *chip)
 
 			if (chip->schg_version != QPNP_SCHG_LITE) {
 				rc = smbchg_request_irq(chip, child,
-					chip->otg_fail_irq, "otg-fail",
+					&chip->otg_fail_irq, "otg-fail",
 					otg_fail_handler, flags);
 				if (rc < 0)
 					return rc;
 				rc = smbchg_request_irq(chip, child,
-					chip->otg_oc_irq, "otg-oc",
+					&chip->otg_oc_irq, "otg-oc",
 					otg_oc_handler,
 					(IRQF_TRIGGER_RISING | IRQF_ONESHOT));
 				if (rc < 0)
 					return rc;
 				rc = smbchg_request_irq(chip, child,
-					chip->usbid_change_irq, "usbid-change",
+					&chip->usbid_change_irq, "usbid-change",
 					usbid_change_handler,
 					(IRQF_TRIGGER_FALLING | IRQF_ONESHOT));
 				if (rc < 0)
@@ -7830,7 +7865,7 @@ static int smbchg_request_irqs(struct smbchg_chip *chip)
 			break;
 		case SMBCHG_DC_CHGPTH_SUBTYPE:
 		case SMBCHG_LITE_DC_CHGPTH_SUBTYPE:
-			rc = smbchg_request_irq(chip, child, chip->dcin_uv_irq,
+			rc = smbchg_request_irq(chip, child, &chip->dcin_uv_irq,
 				"dcin-uv", dcin_uv_handler, flags);
 			if (rc < 0)
 				return rc;
@@ -7838,16 +7873,17 @@ static int smbchg_request_irqs(struct smbchg_chip *chip)
 			break;
 		case SMBCHG_MISC_SUBTYPE:
 		case SMBCHG_LITE_MISC_SUBTYPE:
-			rc = smbchg_request_irq(chip, child, chip->power_ok_irq,
+			rc = smbchg_request_irq(chip, child,
+				&chip->power_ok_irq,
 				"power-ok", power_ok_handler, flags);
 			if (rc < 0)
 				return rc;
-			rc = smbchg_request_irq(chip, child, chip->chg_hot_irq,
+			rc = smbchg_request_irq(chip, child, &chip->chg_hot_irq,
 				"temp-shutdown", chg_hot_handler, flags);
 			if (rc < 0)
 				return rc;
 			rc = smbchg_request_irq(chip, child,
-				chip->wdog_timeout_irq, "wdog-timeout",
+				&chip->wdog_timeout_irq, "wdog-timeout",
 				wdog_timeout_handler, flags);
 			if (rc < 0)
 				return rc;
@@ -7858,19 +7894,19 @@ static int smbchg_request_irqs(struct smbchg_chip *chip)
 			break;
 		case SMBCHG_LITE_OTG_SUBTYPE:
 			rc = smbchg_request_irq(chip, child,
-				chip->usbid_change_irq, "usbid-change",
+				&chip->usbid_change_irq, "usbid-change",
 				usbid_change_handler,
 				(IRQF_TRIGGER_FALLING | IRQF_ONESHOT));
 			if (rc < 0)
 				return rc;
 			rc = smbchg_request_irq(chip, child,
-				chip->otg_oc_irq, "otg-oc",
+				&chip->otg_oc_irq, "otg-oc",
 				otg_oc_handler,
 				(IRQF_TRIGGER_RISING | IRQF_ONESHOT));
 			if (rc < 0)
 				return rc;
 			rc = smbchg_request_irq(chip, child,
-				chip->otg_fail_irq, "otg-fail",
+				&chip->otg_fail_irq, "otg-fail",
 				otg_fail_handler, flags);
 			if (rc < 0)
 				return rc;
@@ -8372,14 +8408,6 @@ static int smbchg_probe(struct platform_device *pdev)
 		goto votables_cleanup;
 	}
 
-	if (of_find_property(chip->dev->of_node, "dpdm-supply", NULL)) {
-		chip->dpdm_reg = devm_regulator_get(chip->dev, "dpdm");
-		if (IS_ERR(chip->dpdm_reg)) {
-			rc = PTR_ERR(chip->dpdm_reg);
-			goto votables_cleanup;
-		}
-	}
-
 	rc = smbchg_hw_init(chip);
 	if (rc < 0) {
 		dev_err(&pdev->dev,
@@ -8488,6 +8516,8 @@ unregister_led_class:
 out:
 	handle_usb_removal(chip);
 votables_cleanup:
+	if (chip->hvdcp_enable_votable)
+		destroy_votable(chip->hvdcp_enable_votable);
 	if (chip->aicl_deglitch_short_votable)
 		destroy_votable(chip->aicl_deglitch_short_votable);
 	if (chip->hw_aicl_rerun_enable_indirect_votable)

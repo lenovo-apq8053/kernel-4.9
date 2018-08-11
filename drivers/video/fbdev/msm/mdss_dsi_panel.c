@@ -24,6 +24,7 @@
 #include <linux/string.h>
 
 #include "mdss_dsi.h"
+#include "mdss_debug.h"
 #ifdef TARGET_HW_MDSS_HDMI
 #include "mdss_dba_utils.h"
 #endif
@@ -260,11 +261,12 @@ static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 						panel_data);
 
-	pr_debug("%s: Idle (%d->%d)\n", __func__, ctrl->idle, enable);
+	pr_info("%s: Idle (%d->%d)\n", __func__, ctrl->idle, enable);
 
 	if (ctrl->idle == enable)
 		return;
 
+	MDSS_XLOG(ctrl->idle, enable);
 	if (enable) {
 		if (ctrl->idle_on_cmds.cmd_cnt) {
 			mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_on_cmds,
@@ -324,6 +326,15 @@ static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 			goto bklt_en_gpio_err;
 		}
 	}
+	if (gpio_is_valid(ctrl_pdata->vdd_ext_gpio)) {
+		rc = gpio_request(ctrl_pdata->vdd_ext_gpio,
+						"vdd_enable");
+		if (rc) {
+			pr_err("request vdd enable gpio failed, rc=%d\n",
+				rc);
+			goto vdd_en_gpio_err;
+		}
+	}
 	if (gpio_is_valid(ctrl_pdata->mode_gpio)) {
 		rc = gpio_request(ctrl_pdata->mode_gpio, "panel_mode");
 		if (rc) {
@@ -335,6 +346,9 @@ static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 	return rc;
 
 mode_gpio_err:
+	if (gpio_is_valid(ctrl_pdata->vdd_ext_gpio))
+		gpio_free(ctrl_pdata->vdd_ext_gpio);
+vdd_en_gpio_err:
 	if (gpio_is_valid(ctrl_pdata->bklt_en_gpio))
 		gpio_free(ctrl_pdata->bklt_en_gpio);
 bklt_en_gpio_err:
@@ -427,6 +441,8 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 						__func__);
 					goto exit;
 				}
+				gpio_set_value((ctrl_pdata->disp_en_gpio), 1);
+				usleep_range(100, 110);
 			}
 
 			if (pdata->panel_info.rst_seq_len) {
@@ -443,8 +459,8 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 				gpio_set_value((ctrl_pdata->rst_gpio),
 					pdata->panel_info.rst_seq[i]);
 				if (pdata->panel_info.rst_seq[++i])
-					usleep_range(pinfo->rst_seq[i] * 1000,
-						     pinfo->rst_seq[i] * 1000);
+					usleep_range((pinfo->rst_seq[i] * 1000),
+					(pinfo->rst_seq[i] * 1000) + 10);
 			}
 
 			if (gpio_is_valid(ctrl_pdata->bklt_en_gpio)) {
@@ -497,6 +513,7 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 		}
 		if (gpio_is_valid(ctrl_pdata->disp_en_gpio)) {
 			gpio_set_value((ctrl_pdata->disp_en_gpio), 0);
+			usleep_range(100, 110);
 			gpio_free(ctrl_pdata->disp_en_gpio);
 		}
 		gpio_set_value((ctrl_pdata->rst_gpio), 0);
@@ -1045,6 +1062,48 @@ static int mdss_dsi_panel_low_power_config(struct mdss_panel_data *pdata,
 		mdss_dsi_panel_set_idle_mode(pdata, false);
 	pr_debug("%s:-\n", __func__);
 	return 0;
+}
+
+static void mdss_dsi_parse_mdp_kickoff_threshold(struct device_node *np,
+	struct mdss_panel_info *pinfo)
+{
+	int len, rc;
+	const u32 *src;
+	u32 tmp;
+	u32 max_delay_us;
+
+	pinfo->mdp_koff_thshold = false;
+	src = of_get_property(np, "qcom,mdss-mdp-kickoff-threshold", &len);
+	if (!src || (len == 0))
+		return;
+
+	rc = of_property_read_u32(np, "qcom,mdss-mdp-kickoff-delay", &tmp);
+	if (!rc)
+		pinfo->mdp_koff_delay = tmp;
+	else
+		return;
+
+	if (pinfo->mipi.frame_rate == 0) {
+		pr_err("cannot enable guard window, unexpected panel fps\n");
+		return;
+	}
+
+	pinfo->mdp_koff_thshold_low = be32_to_cpu(src[0]);
+	pinfo->mdp_koff_thshold_high = be32_to_cpu(src[1]);
+	max_delay_us = 1000000 / pinfo->mipi.frame_rate;
+
+	/* enable the feature if threshold is valid */
+	if ((pinfo->mdp_koff_thshold_low < pinfo->mdp_koff_thshold_high) &&
+	   ((pinfo->mdp_koff_delay > 0) ||
+	    (pinfo->mdp_koff_delay < max_delay_us)))
+		pinfo->mdp_koff_thshold = true;
+
+	pr_debug("panel kickoff thshold:[%d, %d] delay:%d (max:%d) enable:%d\n",
+		pinfo->mdp_koff_thshold_low,
+		pinfo->mdp_koff_thshold_high,
+		pinfo->mdp_koff_delay,
+		max_delay_us,
+		pinfo->mdp_koff_thshold);
 }
 
 static void mdss_dsi_parse_trigger(struct device_node *np, char *trigger,
@@ -2827,6 +2886,8 @@ static int mdss_panel_parse_dt(struct device_node *np,
 
 	rc = of_property_read_u32(np, "qcom,mdss-mdp-transfer-time-us", &tmp);
 	pinfo->mdp_transfer_time_us = (!rc ? tmp : DEFAULT_MDP_TRANSFER_TIME);
+
+	mdss_dsi_parse_mdp_kickoff_threshold(np, pinfo);
 
 	pinfo->mipi.lp11_init = of_property_read_bool(np,
 					"qcom,mdss-dsi-lp11-init");
