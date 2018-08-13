@@ -412,3 +412,7 @@
 		status = "okay";
 	};
 };
+
+&blsp2_uart0 {
+	status = "okay";
+};
