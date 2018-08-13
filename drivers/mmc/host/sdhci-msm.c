@@ -4662,6 +4662,68 @@ static bool sdhci_msm_is_bootdevice(struct device *dev)
 	return true;
 }
 
+/* =============== !!!! WORKAROUND !!!! ================
+ * Workaround for QCOM case #02341054
+ * Should be used till QCOM provides a solution
+ * Description: Add extra VIO capability from DTS nest,workaround-ocr-add-vio
+ * property. QCOM 7864900.sdhci controller supports only 1.8V VIO and uses
+ * reserved 7th bit in OCR from IO_SEND_OP_COND Response (Table 3-1 in [1])
+ * to identify that. Supporting _only_ 1.8V also means that regular OCR value
+ * is 0. Also there is no guarantee that SDIO device with dual voltage support
+ * use this bit to identify 1.8v support. Based on a card initialization flow
+ * (Figure 3-2 in [1]) chacking compatibility between a host and a device starts
+ * without 1.8V support (S18R is not set) and switch to 1.8V support on later
+ * stage. All this can be a cause that a device initialization can fail with next
+ * error if the device does not set 7th bit in its OCR:
+ *		mmc2: host doesn't support card's voltages
+ *		mmc2: error -22 whilst initialising SDIO card
+ * Please read [1] for more details.
+ * Adding a fake VIO support lets pass the first stage of capability
+ * verification and switch to 1.8V mode
+ *
+ * [1] SDIO Simplified Specification https://www.sdcard.org/downloads/pls/index.html
+ */
+static void sdhci_msm_add_fake_vio_support(struct device *dev, struct sdhci_host *host)
+{
+	struct device_node *np = dev->of_node;
+        struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+        struct sdhci_msm_host *msm_host = pltfm_host->priv;
+        const struct sdhci_msm_offset *msm_host_offset =
+                                        msm_host->offset;
+	int len, i;
+	u32 caps;
+
+	if (!np) {
+		dev_info(dev, "%s: device node is NULL\n", mmc_hostname(host->mmc));
+		return;
+	}
+
+	caps = readl_relaxed(host->ioaddr + SDHCI_CAPABILITIES);
+
+	len = of_property_count_strings(np, "nest,workaround-ocr-add-vio");
+
+	for (i = 0; i < len; i++) {
+		const char *name = NULL;
+
+		of_property_read_string_index(np,
+			"nest,workaround-ocr-add-vio", i, &name);
+		if (!name)
+			continue;
+
+		if (!strncmp(name, "VIO_3_3", sizeof("VIO_3_3"))) {
+			caps |= CORE_3_3V_SUPPORT;
+			dev_info(dev, "WORKAROUND: add VIO 3V3 support into HOST OCR\n");
+		}
+		else if (!strncmp(name, "VIO_3_0", sizeof("VIO_3_0"))) {
+			caps |= CORE_3_0V_SUPPORT;
+			dev_info(dev, "WORKAROUND: add VIO 3V0 support into HOST OCR\n");
+		}
+		dev_dbg(dev, "Apply WORKAROUND for HOST OCR. New CAPS 0x%08X\n", caps);
+		writel_relaxed(caps, host->ioaddr +
+				msm_host_offset->CORE_VENDOR_SPEC_CAPABILITIES0);
+	}
+}
+
 static int sdhci_msm_probe(struct platform_device *pdev)
 {
 	const struct sdhci_msm_offset *msm_host_offset;
@@ -4942,6 +5004,11 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 				msm_host->core_mem + CORE_HC_MODE);
 	}
 	sdhci_set_default_hw_caps(msm_host, host);
+
+	/*
+	 * WORKAROUND: update host OCR with fake value.
+	 */
+	sdhci_msm_add_fake_vio_support(&pdev->dev, host);
 
 	/*
 	 * Set the PAD_PWR_SWTICH_EN bit so that the PAD_PWR_SWITCH bit can
