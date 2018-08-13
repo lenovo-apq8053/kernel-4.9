@@ -139,7 +139,6 @@ static void __tmc_reg_dump(struct tmc_drvdata *drvdata)
 void tmc_enable_hw(struct tmc_drvdata *drvdata)
 {
 	drvdata->enable = true;
-	drvdata->sticky_enable = true;
 	writel_relaxed(TMC_CTL_CAPT_EN, drvdata->base + TMC_CTL);
 	if (drvdata->force_reg_dump)
 		__tmc_reg_dump(drvdata);
@@ -155,7 +154,7 @@ static int tmc_read_prepare(struct tmc_drvdata *drvdata)
 {
 	int ret = 0;
 
-	if (!drvdata->sticky_enable)
+	if (!drvdata->enable)
 		return -EPERM;
 
 	switch (drvdata->config_type) {
@@ -731,6 +730,13 @@ static int tmc_probe(struct amba_device *adev, const struct amba_id *id)
 		drvdata->byte_cntr = byte_cntr_init(adev, drvdata);
 
 		ret = tmc_etr_bam_init(adev, drvdata);
+		if (ret)
+			goto out;
+		/*
+		 * ETR configuration uses a 40-bit AXI master in place of
+		 * the embedded SRAM of ETB/ETF.
+		 */
+		ret = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(40));
 		if (ret)
 			goto out;
 	} else {

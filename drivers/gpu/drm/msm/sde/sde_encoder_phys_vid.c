@@ -40,6 +40,20 @@
 #define POLL_TIME_USEC_FOR_LN_CNT 500
 #define MAX_POLL_CNT 10
 
+static bool _sde_encoder_phys_is_ppsplit(struct sde_encoder_phys *phys_enc)
+{
+	enum sde_rm_topology_name topology;
+
+	if (!phys_enc)
+		return false;
+
+	topology = sde_connector_get_topology_name(phys_enc->connector);
+	if (topology == SDE_RM_TOPOLOGY_PPSPLIT)
+		return true;
+
+	return false;
+}
+
 static bool sde_encoder_phys_vid_is_master(
 		struct sde_encoder_phys *phys_enc)
 {
@@ -313,12 +327,14 @@ static void programmable_rot_fetch_config(struct sde_encoder_phys *phys_enc,
 	if (!phys_enc->sde_kms->splash_data.cont_splash_en) {
 		SDE_EVT32(DRMID(phys_enc->parent), f.enable, f.fetch_start);
 
-		phys_enc->hw_ctl->ops.get_bitmask_intf(
-				phys_enc->hw_ctl, &flush_mask,
-				vid_enc->hw_intf->idx);
-		phys_enc->hw_ctl->ops.update_pending_flush(
-				phys_enc->hw_ctl, flush_mask);
-
+		if (!_sde_encoder_phys_is_ppsplit(phys_enc) ||
+			sde_encoder_phys_vid_is_master(phys_enc)) {
+			phys_enc->hw_ctl->ops.get_bitmask_intf(
+					phys_enc->hw_ctl, &flush_mask,
+					vid_enc->hw_intf->idx);
+			phys_enc->hw_ctl->ops.update_pending_flush(
+					phys_enc->hw_ctl, flush_mask);
+		}
 		spin_lock_irqsave(phys_enc->enc_spinlock, lock_flags);
 		vid_enc->hw_intf->ops.setup_rot_start(vid_enc->hw_intf, &f);
 		spin_unlock_irqrestore(phys_enc->enc_spinlock, lock_flags);
@@ -496,20 +512,6 @@ static void sde_encoder_phys_vid_underrun_irq(void *arg, int irq_idx)
 			phys_enc);
 }
 
-static bool _sde_encoder_phys_is_ppsplit(struct sde_encoder_phys *phys_enc)
-{
-	enum sde_rm_topology_name topology;
-
-	if (!phys_enc)
-		return false;
-
-	topology = sde_connector_get_topology_name(phys_enc->connector);
-	if (topology == SDE_RM_TOPOLOGY_PPSPLIT)
-		return true;
-
-	return false;
-}
-
 static bool _sde_encoder_phys_is_dual_ctl(struct sde_encoder_phys *phys_enc)
 {
 	enum sde_rm_topology_name topology;
@@ -625,6 +627,7 @@ static int sde_encoder_phys_vid_control_vblank_irq(
 		return -EINVAL;
 	}
 
+	mutex_lock(phys_enc->vblank_ctl_lock);
 	refcount = atomic_read(&phys_enc->vblank_refcount);
 	vid_enc = to_sde_encoder_phys_vid(phys_enc);
 
@@ -645,11 +648,17 @@ static int sde_encoder_phys_vid_control_vblank_irq(
 	SDE_EVT32(DRMID(phys_enc->parent), enable,
 			atomic_read(&phys_enc->vblank_refcount));
 
-	if (enable && atomic_inc_return(&phys_enc->vblank_refcount) == 1)
+	if (enable && atomic_inc_return(&phys_enc->vblank_refcount) == 1) {
 		ret = sde_encoder_helper_register_irq(phys_enc, INTR_IDX_VSYNC);
-	else if (!enable && atomic_dec_return(&phys_enc->vblank_refcount) == 0)
+		if (ret)
+			atomic_dec_return(&phys_enc->vblank_refcount);
+	} else if (!enable &&
+			atomic_dec_return(&phys_enc->vblank_refcount) == 0) {
 		ret = sde_encoder_helper_unregister_irq(phys_enc,
 				INTR_IDX_VSYNC);
+		if (ret)
+			atomic_inc_return(&phys_enc->vblank_refcount);
+	}
 
 end:
 	if (ret) {
@@ -660,6 +669,7 @@ end:
 				vid_enc->hw_intf->idx - INTF_0,
 				enable, refcount, SDE_EVTLOG_ERROR);
 	}
+	mutex_unlock(phys_enc->vblank_ctl_lock);
 	return ret;
 }
 
@@ -1233,6 +1243,7 @@ struct sde_encoder_phys *sde_encoder_phys_vid_init(
 	phys_enc->split_role = p->split_role;
 	phys_enc->intf_mode = INTF_MODE_VIDEO;
 	phys_enc->enc_spinlock = p->enc_spinlock;
+	phys_enc->vblank_ctl_lock = p->vblank_ctl_lock;
 	phys_enc->comp_type = p->comp_type;
 	for (i = 0; i < INTR_IDX_MAX; i++) {
 		irq = &phys_enc->irq[i];

@@ -2372,6 +2372,7 @@ iommu_init_mapping(struct device *dev, struct dma_iommu_mapping *mapping)
 
 	mapping->nr_bitmaps = 1;
 	mapping->extensions = extensions;
+	mapping->bits = BITS_PER_BYTE * bitmap_size;
 
 	spin_lock_init(&mapping->lock);
 	mapping->ops = &iommu_ops;
@@ -2482,7 +2483,10 @@ static int __arm_iommu_attach_device(struct device *dev,
 {
 	int err;
 
-	err = iommu_attach_device(mapping->domain, dev);
+	if (!dev->iommu_group)
+		return -EINVAL;
+
+	err = iommu_attach_group(mapping->domain, dev->iommu_group);
 	if (err)
 		return err;
 
@@ -2609,7 +2613,7 @@ static bool arm_setup_iommu_dma_ops(struct device *dev, u64 dma_base, u64 size,
 	}
 
 	if (__arm_iommu_attach_device(dev, mapping)) {
-		pr_warn("Failed to attached device %s to IOMMU_mapping\n",
+		pr_debug("Failed to attached device %s to IOMMU_mapping\n",
 				dev_name(dev));
 		arm_iommu_release_mapping(mapping);
 		return false;

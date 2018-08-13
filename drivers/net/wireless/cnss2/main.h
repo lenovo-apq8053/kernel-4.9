@@ -24,6 +24,8 @@
 #include "qmi.h"
 
 #define MAX_NO_OF_MAC_ADDR		4
+#define QMI_WLFW_MAX_TIMESTAMP_LEN	32
+#define QMI_WLFW_MAX_NUM_MEM_SEG	32
 
 #define CNSS_EVENT_SYNC   BIT(0)
 #define CNSS_EVENT_UNINTERRUPTIBLE BIT(1)
@@ -107,6 +109,34 @@ struct cnss_fw_mem {
 	void *va;
 	phys_addr_t pa;
 	bool valid;
+	u32 type;
+};
+
+struct wlfw_rf_chip_info {
+	u32 chip_id;
+	u32 chip_family;
+};
+
+struct wlfw_rf_board_info {
+	u32 board_id;
+};
+
+struct wlfw_soc_info {
+	u32 soc_id;
+};
+
+struct wlfw_fw_version_info {
+	u32 fw_version;
+	char fw_build_timestamp[QMI_WLFW_MAX_TIMESTAMP_LEN + 1];
+};
+
+enum cnss_mem_type {
+	CNSS_MEM_TYPE_MSA,
+	CNSS_MEM_TYPE_DDR,
+	CNSS_MEM_BDF,
+	CNSS_MEM_M3,
+	CNSS_MEM_CAL_V01,
+	CNSS_MEM_DPD_V01,
 };
 
 enum cnss_fw_dump_type {
@@ -169,9 +199,17 @@ struct cnss_pin_connect_result {
 	u32 host_pin_result;
 };
 
+enum cnss_debug_quirks {
+	LINK_DOWN_SELF_RECOVERY,
+	SKIP_DEVICE_BOOT,
+	USE_CORE_ONLY_FW,
+	SKIP_RECOVERY,
+};
+
 struct cnss_plat_data {
 	struct platform_device *plat_dev;
 	void *bus_priv;
+	enum cnss_dev_bus_type bus_type;
 	struct cnss_vreg_info *vreg_info;
 	struct cnss_pinctrl_info pinctrl_info;
 	struct cnss_subsys_info subsys_info;
@@ -183,7 +221,6 @@ struct cnss_plat_data {
 	struct cnss_platform_cap cap;
 	struct pm_qos_request qos_request;
 	unsigned long device_id;
-	struct cnss_wlan_driver *driver_ops;
 	enum cnss_driver_status driver_status;
 	u32 recovery_count;
 	unsigned long driver_state;
@@ -194,11 +231,12 @@ struct cnss_plat_data {
 	struct qmi_handle *qmi_wlfw_clnt;
 	struct work_struct qmi_recv_msg_work;
 	struct notifier_block qmi_wlfw_clnt_nb;
-	struct wlfw_rf_chip_info_s_v01 chip_info;
-	struct wlfw_rf_board_info_s_v01 board_info;
-	struct wlfw_soc_info_s_v01 soc_info;
-	struct wlfw_fw_version_info_s_v01 fw_version_info;
-	struct cnss_fw_mem fw_mem;
+	struct wlfw_rf_chip_info chip_info;
+	struct wlfw_rf_board_info board_info;
+	struct wlfw_soc_info soc_info;
+	struct wlfw_fw_version_info fw_version_info;
+	u32 fw_mem_seg_len;
+	struct cnss_fw_mem fw_mem[QMI_WLFW_MAX_NUM_MEM_SEG];
 	struct cnss_fw_mem m3_mem;
 	struct cnss_pin_connect_result pin_result;
 	struct dentry *root_dentry;
@@ -210,10 +248,13 @@ struct cnss_plat_data {
 	u32 diag_reg_read_mem_type;
 	u32 diag_reg_read_len;
 	u8 *diag_reg_read_buf;
+	bool cal_done;
+	char firmware_name[13];
 };
 
-void *cnss_bus_dev_to_bus_priv(struct device *dev);
-struct cnss_plat_data *cnss_bus_dev_to_plat_priv(struct device *dev);
+struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev);
+bool *cnss_get_qmi_bypass(void);
+unsigned long *cnss_get_debug_quirks(void);
 int cnss_driver_event_post(struct cnss_plat_data *plat_priv,
 			   enum cnss_driver_event_type type,
 			   u32 flags, void *data);
@@ -226,6 +267,5 @@ void cnss_unregister_subsys(struct cnss_plat_data *plat_priv);
 int cnss_register_ramdump(struct cnss_plat_data *plat_priv);
 void cnss_unregister_ramdump(struct cnss_plat_data *plat_priv);
 void cnss_set_pin_connect_status(struct cnss_plat_data *plat_priv);
-u32 cnss_get_wake_msi(struct cnss_plat_data *plat_priv);
 
 #endif /* _CNSS_MAIN_H */

@@ -377,7 +377,7 @@ static int dsi_panel_reset(struct dsi_panel *panel)
 
 		if (r_config->sequence[i].sleep_ms)
 			usleep_range(r_config->sequence[i].sleep_ms * 1000,
-				     r_config->sequence[i].sleep_ms * 1000);
+				(r_config->sequence[i].sleep_ms * 1000) + 100);
 	}
 
 	if (gpio_is_valid(panel->bl_config.en_gpio)) {
@@ -1076,6 +1076,8 @@ static int dsi_panel_parse_misc_host_config(struct dsi_host_common_cfg *host,
 	host->append_tx_eot = of_property_read_bool(of_node,
 						"qcom,mdss-dsi-tx-eot-append");
 
+	host->force_hs_clk_lane = of_property_read_bool(of_node,
+					"qcom,mdss-dsi-force-clock-lane-hs");
 	return 0;
 }
 
@@ -1536,7 +1538,7 @@ static int dsi_panel_create_cmd_packets(const char *data,
 		cmd[i].msg.channel = data[2];
 		cmd[i].msg.flags |= (data[3] == 1 ? MIPI_DSI_MSG_REQ_ACK : 0);
 		cmd[i].msg.ctrl = 0;
-		cmd[i].post_wait_ms = data[4];
+		cmd[i].post_wait_ms = cmd[i].msg.wait_ms = data[4];
 		cmd[i].msg.tx_len = ((data[5] << 8) | (data[6]));
 
 		size = cmd[i].msg.tx_len * sizeof(u8);
@@ -1771,6 +1773,9 @@ static int dsi_panel_parse_misc_features(struct dsi_panel *panel,
 
 	panel->sync_broadcast_en = of_property_read_bool(of_node,
 			"qcom,cmd-sync-wait-broadcast");
+
+	panel->lp11_init = of_property_read_bool(of_node,
+			"qcom,mdss-dsi-lp11-init");
 	return 0;
 }
 
@@ -2773,6 +2778,9 @@ int dsi_panel_parse_esd_reg_read_configs(struct dsi_panel *panel,
 				esd_config->groups * status_len);
 	}
 
+	esd_config->cmd_channel = of_property_read_bool(of_node,
+		"qcom,mdss-dsi-panel-cmds-only-by-right");
+
 	return 0;
 
 error4:
@@ -3511,6 +3519,7 @@ static int dsi_panel_roi_prepare_dcs_cmds(struct dsi_panel_cmd_set *set,
 	set->cmds[0].msg.tx_buf = caset;
 	set->cmds[0].msg.rx_len = 0;
 	set->cmds[0].msg.rx_buf = 0;
+	set->cmds[0].msg.wait_ms = 0;
 	set->cmds[0].last_command = 0;
 	set->cmds[0].post_wait_ms = 0;
 
@@ -3522,6 +3531,7 @@ static int dsi_panel_roi_prepare_dcs_cmds(struct dsi_panel_cmd_set *set,
 	set->cmds[1].msg.tx_buf = paset;
 	set->cmds[1].msg.rx_len = 0;
 	set->cmds[1].msg.rx_buf = 0;
+	set->cmds[1].msg.wait_ms = 0;
 	set->cmds[1].last_command = 1;
 	set->cmds[1].post_wait_ms = 0;
 
@@ -3712,11 +3722,14 @@ int dsi_panel_disable(struct dsi_panel *panel)
 
 	mutex_lock(&panel->panel_lock);
 
-	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_OFF);
-	if (rc) {
-		pr_err("[%s] failed to send DSI_CMD_SET_OFF cmds, rc=%d\n",
-		       panel->name, rc);
-		goto error;
+	/* Avoid sending panel off commands when ESD recovery is underway */
+	if (!atomic_read(&panel->esd_recovery_pending)) {
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_OFF);
+		if (rc) {
+			pr_err("[%s] failed to send DSI_CMD_SET_OFF cmds, rc=%d\n",
+					panel->name, rc);
+			goto error;
+		}
 	}
 	panel->panel_initialized = false;
 
@@ -3746,14 +3759,6 @@ int dsi_panel_unprepare(struct dsi_panel *panel)
 		goto error;
 	}
 
-	if (panel->lp11_init) {
-		rc = dsi_panel_power_off(panel);
-		if (rc) {
-			pr_err("[%s] panel power_Off failed, rc=%d\n",
-			       panel->name, rc);
-			goto error;
-		}
-	}
 error:
 	mutex_unlock(&panel->panel_lock);
 	return rc;
@@ -3773,13 +3778,11 @@ int dsi_panel_post_unprepare(struct dsi_panel *panel)
 
 	mutex_lock(&panel->panel_lock);
 
-	if (!panel->lp11_init) {
-		rc = dsi_panel_power_off(panel);
-		if (rc) {
-			pr_err("[%s] panel power_Off failed, rc=%d\n",
-			       panel->name, rc);
-			goto error;
-		}
+	rc = dsi_panel_power_off(panel);
+	if (rc) {
+		pr_err("[%s] panel power_Off failed, rc=%d\n",
+		       panel->name, rc);
+		goto error;
 	}
 error:
 	mutex_unlock(&panel->panel_lock);

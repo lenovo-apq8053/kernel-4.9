@@ -88,6 +88,7 @@ static void sde_cp_ad_set_prop(struct sde_crtc *sde_crtc,
 		enum ad_property ad_prop);
 
 static void sde_cp_notify_hist_event(struct drm_crtc *crtc_drm, void *arg);
+static void sde_cp_update_ad_vsync_prop(struct sde_crtc *sde_crtc, u32 val);
 
 #define setup_dspp_prop_install_funcs(func) \
 do { \
@@ -138,6 +139,7 @@ enum {
 	SDE_CP_CRTC_DSPP_AD_ASSERTIVENESS,
 	SDE_CP_CRTC_DSPP_AD_BACKLIGHT,
 	SDE_CP_CRTC_DSPP_AD_STRENGTH,
+	SDE_CP_CRTC_DSPP_AD_VSYNC_COUNT,
 	SDE_CP_CRTC_DSPP_MAX,
 	/* DSPP features end */
 
@@ -280,7 +282,8 @@ static int sde_cp_handle_range_property(struct sde_cp_node *prop_node,
 		return 0;
 	}
 
-	ret = copy_from_user(blob_ptr->data, (void *)val, blob_ptr->length);
+	ret = copy_from_user(blob_ptr->data, u64_to_user_ptr(val),
+			blob_ptr->length);
 	if (ret) {
 		DRM_ERROR("failed to get the property info ret %d", ret);
 		ret = -EFAULT;
@@ -407,6 +410,7 @@ void sde_cp_crtc_init(struct drm_crtc *crtc)
 	if (IS_ERR(sde_crtc->hist_blob))
 		sde_crtc->hist_blob = NULL;
 
+	sde_crtc->ad_vsync_count = 0;
 	mutex_init(&sde_crtc->crtc_cp_lock);
 	INIT_LIST_HEAD(&sde_crtc->active_list);
 	INIT_LIST_HEAD(&sde_crtc->dirty_list);
@@ -789,6 +793,9 @@ static void sde_cp_crtc_setfeature(struct sde_cp_node *prop_node,
 			ad_cfg.prop = AD_MODE;
 			ad_cfg.hw_cfg = &hw_cfg;
 			hw_dspp->ops.setup_ad(hw_dspp, &ad_cfg);
+			sde_crtc->ad_vsync_count = 0;
+			sde_cp_update_ad_vsync_prop(sde_crtc,
+					sde_crtc->ad_vsync_count);
 			break;
 		case SDE_CP_CRTC_DSPP_AD_INIT:
 			if (!hw_dspp || !hw_dspp->ops.setup_ad) {
@@ -798,6 +805,9 @@ static void sde_cp_crtc_setfeature(struct sde_cp_node *prop_node,
 			ad_cfg.prop = AD_INIT;
 			ad_cfg.hw_cfg = &hw_cfg;
 			hw_dspp->ops.setup_ad(hw_dspp, &ad_cfg);
+			sde_crtc->ad_vsync_count = 0;
+			sde_cp_update_ad_vsync_prop(sde_crtc,
+					sde_crtc->ad_vsync_count);
 			break;
 		case SDE_CP_CRTC_DSPP_AD_CFG:
 			if (!hw_dspp || !hw_dspp->ops.setup_ad) {
@@ -807,6 +817,9 @@ static void sde_cp_crtc_setfeature(struct sde_cp_node *prop_node,
 			ad_cfg.prop = AD_CFG;
 			ad_cfg.hw_cfg = &hw_cfg;
 			hw_dspp->ops.setup_ad(hw_dspp, &ad_cfg);
+			sde_crtc->ad_vsync_count = 0;
+			sde_cp_update_ad_vsync_prop(sde_crtc,
+					sde_crtc->ad_vsync_count);
 			break;
 		case SDE_CP_CRTC_DSPP_AD_INPUT:
 			if (!hw_dspp || !hw_dspp->ops.setup_ad) {
@@ -816,6 +829,9 @@ static void sde_cp_crtc_setfeature(struct sde_cp_node *prop_node,
 			ad_cfg.prop = AD_INPUT;
 			ad_cfg.hw_cfg = &hw_cfg;
 			hw_dspp->ops.setup_ad(hw_dspp, &ad_cfg);
+			sde_crtc->ad_vsync_count = 0;
+			sde_cp_update_ad_vsync_prop(sde_crtc,
+					sde_crtc->ad_vsync_count);
 			break;
 		case SDE_CP_CRTC_DSPP_AD_ASSERTIVENESS:
 			if (!hw_dspp || !hw_dspp->ops.setup_ad) {
@@ -825,6 +841,9 @@ static void sde_cp_crtc_setfeature(struct sde_cp_node *prop_node,
 			ad_cfg.prop = AD_ASSERTIVE;
 			ad_cfg.hw_cfg = &hw_cfg;
 			hw_dspp->ops.setup_ad(hw_dspp, &ad_cfg);
+			sde_crtc->ad_vsync_count = 0;
+			sde_cp_update_ad_vsync_prop(sde_crtc,
+					sde_crtc->ad_vsync_count);
 			break;
 		case SDE_CP_CRTC_DSPP_AD_BACKLIGHT:
 			if (!hw_dspp || !hw_dspp->ops.setup_ad) {
@@ -834,6 +853,9 @@ static void sde_cp_crtc_setfeature(struct sde_cp_node *prop_node,
 			ad_cfg.prop = AD_BACKLIGHT;
 			ad_cfg.hw_cfg = &hw_cfg;
 			hw_dspp->ops.setup_ad(hw_dspp, &ad_cfg);
+			sde_crtc->ad_vsync_count = 0;
+			sde_cp_update_ad_vsync_prop(sde_crtc,
+					sde_crtc->ad_vsync_count);
 			break;
 		case SDE_CP_CRTC_DSPP_AD_STRENGTH:
 			if (!hw_dspp || !hw_dspp->ops.setup_ad) {
@@ -843,6 +865,9 @@ static void sde_cp_crtc_setfeature(struct sde_cp_node *prop_node,
 			ad_cfg.prop = AD_STRENGTH;
 			ad_cfg.hw_cfg = &hw_cfg;
 			hw_dspp->ops.setup_ad(hw_dspp, &ad_cfg);
+			sde_crtc->ad_vsync_count = 0;
+			sde_cp_update_ad_vsync_prop(sde_crtc,
+					sde_crtc->ad_vsync_count);
 			break;
 		default:
 			ret = -EINVAL;
@@ -924,8 +949,13 @@ void sde_cp_crtc_apply_properties(struct drm_crtc *crtc)
 			DRM_DEBUG_DRIVER("Dirty list is empty\n");
 			goto exit;
 		}
-		sde_cp_ad_set_prop(sde_crtc, AD_IPC_RESET);
 		set_dspp_flush = true;
+	}
+
+	if (!list_empty(&sde_crtc->ad_active)) {
+		sde_cp_ad_set_prop(sde_crtc, AD_IPC_RESET);
+		sde_cp_ad_set_prop(sde_crtc, AD_VSYNC_UPDATE);
+		sde_cp_update_ad_vsync_prop(sde_crtc, sde_crtc->ad_vsync_count);
 	}
 
 	list_for_each_entry_safe(prop_node, n, &sde_crtc->dirty_list,
@@ -1106,7 +1136,8 @@ int sde_cp_crtc_set_property(struct drm_crtc *crtc,
 	if (!sde_crtc->num_mixers ||
 	    sde_crtc->num_mixers > ARRAY_SIZE(sde_crtc->mixers)) {
 		DRM_INFO("Invalid mixer config act cnt %d max cnt %ld\n",
-			sde_crtc->num_mixers, ARRAY_SIZE(sde_crtc->mixers));
+			sde_crtc->num_mixers,
+				(long int)ARRAY_SIZE(sde_crtc->mixers));
 		ret = -EPERM;
 		goto exit;
 	}
@@ -1264,6 +1295,33 @@ void sde_cp_crtc_suspend(struct drm_crtc *crtc)
 void sde_cp_crtc_resume(struct drm_crtc *crtc)
 {
 	/* placeholder for operations needed during resume */
+}
+
+void sde_cp_crtc_clear(struct drm_crtc *crtc)
+{
+	struct sde_crtc *sde_crtc = NULL;
+	unsigned long flags;
+
+	if (!crtc) {
+		DRM_ERROR("crtc %pK\n", crtc);
+		return;
+	}
+	sde_crtc = to_sde_crtc(crtc);
+	if (!sde_crtc) {
+		DRM_ERROR("sde_crtc %pK\n", sde_crtc);
+		return;
+	}
+
+	mutex_lock(&sde_crtc->crtc_cp_lock);
+	list_del_init(&sde_crtc->active_list);
+	list_del_init(&sde_crtc->dirty_list);
+	list_del_init(&sde_crtc->ad_active);
+	list_del_init(&sde_crtc->ad_dirty);
+	mutex_unlock(&sde_crtc->crtc_cp_lock);
+
+	spin_lock_irqsave(&sde_crtc->spin_lock, flags);
+	list_del_init(&sde_crtc->user_event_list);
+	spin_unlock_irqrestore(&sde_crtc->spin_lock, flags);
 }
 
 static void dspp_pcc_install_property(struct drm_crtc *crtc)
@@ -1449,6 +1507,9 @@ static void dspp_ad_install_property(struct drm_crtc *crtc)
 				"SDE_DSPP_AD_V4_BACKLIGHT",
 			SDE_CP_CRTC_DSPP_AD_BACKLIGHT, 0, (BIT(16) - 1),
 			0);
+		sde_cp_crtc_install_range_property(crtc,
+			"SDE_DSPP_AD_V4_VSYNC_COUNT",
+			SDE_CP_CRTC_DSPP_AD_VSYNC_COUNT, 0, U32_MAX, 0);
 		break;
 	default:
 		DRM_ERROR("version %d not supported\n", version);
@@ -1867,6 +1928,11 @@ static void sde_cp_ad_set_prop(struct sde_crtc *sde_crtc,
 		hw_cfg.displayh = num_mixers * hw_lm->cfg.out_width;
 		hw_cfg.displayv = hw_lm->cfg.out_height;
 		hw_cfg.mixer_info = hw_lm;
+
+		if (ad_prop == AD_VSYNC_UPDATE) {
+			hw_cfg.payload = &sde_crtc->ad_vsync_count;
+			hw_cfg.len = sizeof(sde_crtc->ad_vsync_count);
+		}
 		ad_cfg.prop = ad_prop;
 		ad_cfg.hw_cfg = &hw_cfg;
 		ret = hw_dspp->ops.validate_ad(hw_dspp, (u32 *)&ad_prop);
@@ -1953,11 +2019,10 @@ static void sde_cp_notify_hist_event(struct drm_crtc *crtc_drm, void *arg)
 	struct sde_crtc *crtc;
 	struct drm_event event;
 	struct drm_msm_hist *hist_data;
-	struct drm_msm_hist tmp_hist_data;
 	struct msm_drm_private *priv;
 	struct sde_kms *kms;
 	int ret;
-	u32 i, j;
+	u32 i;
 
 	if (!crtc_drm) {
 		DRM_ERROR("invalid crtc %pK\n", crtc_drm);
@@ -1989,6 +2054,7 @@ static void sde_cp_notify_hist_event(struct drm_crtc *crtc_drm, void *arg)
 
 	/* read histogram data into blob */
 	hist_data = (struct drm_msm_hist *)crtc->hist_blob->data;
+	memset(hist_data->data, 0, sizeof(hist_data->data));
 	for (i = 0; i < crtc->num_mixers; i++) {
 		hw_dspp = crtc->mixers[i].hw_dspp;
 		if (!hw_dspp || !hw_dspp->ops.read_histogram) {
@@ -1998,14 +2064,7 @@ static void sde_cp_notify_hist_event(struct drm_crtc *crtc_drm, void *arg)
 						kms->core_client, false);
 			return;
 		}
-		if (!i) {
-			hw_dspp->ops.read_histogram(hw_dspp, hist_data);
-		} else {
-			/* Merge hist data for DSPP0 and DSPP1 */
-			hw_dspp->ops.read_histogram(hw_dspp, &tmp_hist_data);
-			for (j = 0; j < HIST_V_SIZE; j++)
-				hist_data->data[j] += tmp_hist_data.data[j];
-		}
+		hw_dspp->ops.read_histogram(hw_dspp, hist_data);
 	}
 
 	sde_power_resource_enable(&priv->phandle, kms->core_client,
@@ -2117,4 +2176,36 @@ int sde_cp_hist_interrupt(struct drm_crtc *crtc_drm, bool en,
 
 exit:
 	return ret;
+}
+
+void sde_cp_update_ad_vsync_count(struct drm_crtc *crtc, u32 val)
+{
+	struct sde_crtc *sde_crtc;
+
+	if (!crtc) {
+		DRM_ERROR("invalid crtc %pK\n", crtc);
+		return;
+	}
+
+	sde_crtc = to_sde_crtc(crtc);
+	if (!sde_crtc) {
+		DRM_ERROR("invalid sde_crtc %pK\n", sde_crtc);
+		return;
+	}
+
+	sde_crtc->ad_vsync_count = val;
+	sde_cp_update_ad_vsync_prop(sde_crtc, val);
+}
+
+static void sde_cp_update_ad_vsync_prop(struct sde_crtc *sde_crtc, u32 val)
+{
+	struct sde_cp_node *prop_node = NULL;
+
+	list_for_each_entry(prop_node, &sde_crtc->feature_list, feature_list) {
+		if (prop_node->feature == SDE_CP_CRTC_DSPP_AD_VSYNC_COUNT) {
+			prop_node->prop_val = val;
+			pr_debug("AD vsync count updated to %d\n", val);
+			return;
+		}
+	}
 }

@@ -43,7 +43,8 @@
 #define BGDAEMON_LDO03_LPM_VTG 0
 #define BGDAEMON_LDO03_NPM_VTG 10000
 
-#define MPPS_DOWN_EVENT_TO_BG_TIMEOUT 100
+#define MPPS_DOWN_EVENT_TO_BG_TIMEOUT 3000
+#define SLEEP_FOR_SPI_BUS 2000
 
 enum {
 	SSR_DOMAIN_BG,
@@ -93,6 +94,7 @@ struct  device                   *dev_ret;
 static  dev_t                    bg_dev;
 static  int                      device_open;
 static  void                     *handle;
+static	bool                     twm_exit;
 static  struct   bgcom_open_config_type   config_type;
 static DECLARE_COMPLETION(bg_modem_down_wait);
 
@@ -304,10 +306,23 @@ static int bgchar_write_cmd(struct bg_ui_data *fui_obj_msg, int type)
 
 int bg_soft_reset(void)
 {
-	/*pull down reset gpio */
-	gpio_direction_output(bgreset_gpio, 0);
+	pr_debug("do BG reset using gpio %d\n", bgreset_gpio);
+	if (!gpio_is_valid(bgreset_gpio)) {
+		pr_err("gpio %d is not valid\n", bgreset_gpio);
+		return -ENXIO;
+	}
+	if (gpio_direction_output(bgreset_gpio, 1))
+		pr_err("gpio %d direction not set\n", bgreset_gpio);
+
+	/* Sleep for 50ms for hardware to detect signal as high */
+	msleep(50);
+
+	gpio_set_value(bgreset_gpio, 0);
+
+	/* Sleep for 50ms for hardware to detect signal as high */
 	msleep(50);
 	gpio_set_value(bgreset_gpio, 1);
+
 	return 0;
 }
 EXPORT_SYMBOL(bg_soft_reset);
@@ -353,12 +368,18 @@ static long bg_com_ioctl(struct file *filp,
 		break;
 	case SET_SPI_BUSY:
 		ret = bgcom_set_spi_state(BGCOM_SPI_BUSY);
+		/* Add sleep for  SPI Bus to release*/
+		msleep(SLEEP_FOR_SPI_BUS);
 		break;
 	case BG_SOFT_RESET:
 		ret = bg_soft_reset();
 		break;
 	case BG_MODEM_DOWN2_BG_DONE:
 		ret = modem_down2_bg();
+		break;
+	case BG_TWM_EXIT:
+		twm_exit = true;
+		ret = 0;
 		break;
 	default:
 		ret = -ENOIOCTLCMD;
@@ -515,6 +536,10 @@ static int ssr_bg_cb(struct notifier_block *this,
 		bgcom_set_spi_state(BGCOM_SPI_BUSY);
 		send_uevent(&bge);
 		break;
+	case SUBSYS_AFTER_SHUTDOWN:
+		/* Add sleep for  SPI Bus to release*/
+		msleep(SLEEP_FOR_SPI_BUS);
+		break;
 	case SUBSYS_AFTER_POWERUP:
 		bge.e_type = BG_AFTER_POWER_UP;
 		bgdaemon_ldowork(DISABLE_LDO03);
@@ -554,6 +579,16 @@ static int ssr_modem_cb(struct notifier_block *this,
 	}
 	return NOTIFY_DONE;
 }
+
+bool is_twm_exit(void)
+{
+	if (twm_exit) {
+		twm_exit = false;
+		return true;
+	}
+	return false;
+}
+EXPORT_SYMBOL(is_twm_exit);
 
 static struct notifier_block ssr_modem_nb = {
 	.notifier_call = ssr_modem_cb,

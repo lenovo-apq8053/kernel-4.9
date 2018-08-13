@@ -14,6 +14,7 @@
 #include "msm8937.dtsi"
 #include "sdm439-pm8953.dtsi"
 #include "sdm439-pmi632.dtsi"
+#include "sdm439-audio.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. SDM439";
@@ -49,6 +50,7 @@
 		qcom,governor-per-policy;
 
 		qcom,cpufreq-table-0 =
+			 <  960000 >,
 			 < 1305600 >,
 			 < 1497600 >,
 			 < 1708800 >,
@@ -76,9 +78,9 @@
 			<  2929 /*  384   MHz */ >,     /* SVS */
 			<  3221 /*  422.4 MHz */ >,
 			<  4248 /*  556.8 MHz */ >,
-			<  5126 /*  662.4 MHz */ >,     /* SVS+  */
-			<  5859 /*  748.8 MHz */ >,     /* NOM   */
-			<  6152 /*  806.4 MHz */ >,     /* NOM+  */
+			<  5053 /*  662.4 MHz */ >,     /* SVS+  */
+			<  5712 /*  748.8 MHz */ >,     /* NOM   */
+			<  6079 /*  796.8 MHz */ >,     /* NOM+  */
 			<  6445 /*  844.8 MHz */ >,
 			<  7104 /*  931.2 MHz */ >;     /* TURBO */
 	};
@@ -96,9 +98,9 @@
 			<  2929 /*  384   MHz */ >,     /* SVS */
 			<  3221 /*  422.4 MHz */ >,
 			<  4248 /*  556.8 MHz */ >,
-			<  5126 /*  662.4 MHz */ >,     /* SVS+  */
-			<  5859 /*  748.8 MHz */ >,     /* NOM   */
-			<  6152 /*  806.4 MHz */ >,     /* NOM+  */
+			<  5053 /*  662.4 MHz */ >,     /* SVS+  */
+			<  5712 /*  748.8 MHz */ >,     /* NOM   */
+			<  6079 /*  796.8 MHz */ >,     /* NOM+  */
 			<  6445 /*  844.8 MHz */ >,
 			<  7104 /*  931.2 MHz */ >;     /* TURBO */
 	};
@@ -122,16 +124,16 @@
 		cpubw-cpufreq {
 		target-dev = <&cpubw>;
 		cpu-to-dev-map-0 =
-			< 1305600  5126 >,
-			< 1497600  5859 >,
+			< 1305600  5053 >,
+			< 1497600  5712 >,
 			< 1708800  6445 >,
 			< 1804800  7104 >,
 			< 1958400  7104 >;
 		cpu-to-dev-map-4 =
 			<  768000  2929 >,
-			<  998400  5126 >,
-			< 1171200  5859 >,
-			< 1305600  6152 >,
+			<  998400  5053 >,
+			< 1171200  5712 >,
+			< 1305600  6079 >,
 			< 1459200  7104 >;
 
 		};
@@ -156,10 +158,10 @@
 			target-dev = <&mincpubw>;
 			cpu-to-dev-map-0 =
 				< 1305600 2929 >,
-				< 1804800 5859 >;
+				< 1804800 5712 >;
 			cpu-to-dev-map-4 =
 				< 1171200 2929 >,
-				< 1459200 5859 >;
+				< 1459200 5712 >;
 		};
 	};
 };
@@ -278,6 +280,7 @@
 
 	qcom,speed0-bin-v0-c1 =
 		<          0 0>,
+		<  960000000 1>,
 		< 1305600000 1>,
 		< 1497600000 2>,
 		< 1708800000 3>,
@@ -298,6 +301,7 @@
 
 	qcom,speed1-bin-v0-c1 =
 		<          0 0>,
+		<  960000000 1>,
 		< 1305600000 1>,
 		< 1497600000 2>,
 		< 1708800000 3>,
@@ -324,6 +328,16 @@
 	vdd_hf_pll-supply = <&pm8953_l7_ao>;
 };
 
+&soc {
+	devfreq_spdm_cpu {
+		status = "disabled";
+	};
+
+	devfreq_spdm_gov {
+		status = "disabled";
+	};
+};
+
 &clock_gcc_mdss {
 	compatible = "qcom,gcc-mdss-sdm439";
 	clocks = <&mdss_dsi0_pll clk_dsi0pll_pixel_clk_src>,
@@ -340,10 +354,10 @@
 	reg = <0x001a94400 0x400>,
 		<0x0184d074 0x8>;
 	reg-names = "pll_base", "gdsc_base";
-	/delete-property/ qcom,dsi-pll-ssc-en;
-	/delete-property/ qcom,dsi-pll-ssc-mode;
-	/delete-property/ qcom,ssc-frequency-hz;
-	/delete-property/ qcom,ssc-ppm;
+	qcom,dsi-pll-ssc-en;
+	qcom,dsi-pll-ssc-mode = "down-spread";
+	qcom,ssc-frequency-hz = <31500>;
+	qcom,ssc-ppm = <5000>;
 };
 
 &mdss_dsi1_pll {
@@ -351,10 +365,10 @@
 	reg = <0x001a96400 0x400>,
 		<0x0184d074 0x8>;
 	reg-names = "pll_base", "gdsc_base";
-	/delete-property/ qcom,dsi-pll-ssc-en;
-	/delete-property/ qcom,dsi-pll-ssc-mode;
-	/delete-property/ qcom,ssc-frequency-hz;
-	/delete-property/ qcom,ssc-ppm;
+	qcom,dsi-pll-ssc-en;
+	qcom,dsi-pll-ssc-mode = "down-spread";
+	qcom,ssc-frequency-hz = <31500>;
+	qcom,ssc-ppm = <5000>;
 };
 
 &mdss_dsi {
@@ -617,6 +631,20 @@
 				qcom,bus-freq = <0>;
 				qcom,bus-min = <0>;
 				qcom,bus-max = <0>;
+			};
+		};
+	};
+};
+
+&mdss_mdp {
+	qcom,vbif-settings = <0xd0 0x20>;
+};
+
+&thermal_zones {
+	hexa-cpu-max-step {
+		trips {
+			cpu-trip {
+				temperature = <95000>;
 			};
 		};
 	};
