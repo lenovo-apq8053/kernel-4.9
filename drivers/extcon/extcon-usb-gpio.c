@@ -28,6 +28,8 @@
 #include <linux/workqueue.h>
 #include <linux/acpi.h>
 
+#include <linux/hrtimer.h>
+
 #define USB_GPIO_DEBOUNCE_MS	20	/* ms */
 
 struct usb_extcon_info {
@@ -41,6 +43,12 @@ struct usb_extcon_info {
 
 	unsigned long debounce_jiffies;
 	struct delayed_work wq_detcable;
+
+	/* Button Support */
+	struct delayed_work       debounce_timer;
+	bool            enable_button_mode;
+	struct pinctrl      *pinctrl;
+	struct pinctrl_state    *button_active;
 };
 
 static const unsigned int usb_extcon_cable[] = {
@@ -48,6 +56,46 @@ static const unsigned int usb_extcon_cable[] = {
 	EXTCON_USB_HOST,
 	EXTCON_NONE,
 };
+
+static void hrtimer_event(struct work_struct *work)
+{
+	struct usb_extcon_info *info = container_of(to_delayed_work(work),
+						    struct usb_extcon_info,
+						    debounce_timer);
+	int button;
+	int mode;
+
+	button = gpiod_get_value_cansleep(info->vbus_gpiod);
+
+	if(!button){
+	        /* service button press */
+		mode = extcon_get_state(info->edev, EXTCON_USB_HOST);
+		if(!mode){
+			/* we are in device mode, switch to host */
+			extcon_set_state_sync(info->edev, EXTCON_USB, false);
+			extcon_set_state_sync(info->edev, EXTCON_USB_HOST, true);
+		} else {
+			/* we are in host mode, switch to device */
+			pr_err("switching to device mode \n");
+			extcon_set_state_sync(info->edev, EXTCON_USB_HOST, false);
+			extcon_set_state_sync(info->edev, EXTCON_USB, true);
+		}
+	} else {
+		/* button was not pressed long enough */
+		pr_info("mode switch button wasn't pressed long enough \n");
+	}
+}
+
+static irqreturn_t gpio_usbdetect_button_irq(int irq, void *data)
+{
+	struct usb_extcon_info *info = data;
+
+	/* Kick off debounce timer for a valid button press */
+	queue_delayed_work(system_power_efficient_wq, &info->debounce_timer,
+			   msecs_to_jiffies(250));
+
+	return IRQ_HANDLED;
+}
 
 /*
  * "USB" = VBUS and "USB-HOST" = !ID, so we have:
@@ -103,6 +151,37 @@ static irqreturn_t usb_irq_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+static int gpio_usbdetect_pinctrl_dt(struct usb_extcon_info *usb)
+{
+	int ret = 0;
+
+	usb->pinctrl = devm_pinctrl_get(usb->dev);
+	if (IS_ERR(usb->pinctrl)) {
+		ret = PTR_ERR(usb->pinctrl);
+		if (ret == -EPROBE_DEFER)
+			return ret;
+	dev_err(usb->dev, "pinctrl not available\n");
+	ret = -ENODEV;
+	goto exit;
+	}
+
+	usb->button_active = pinctrl_lookup_state(usb->pinctrl,
+				"button_active");
+	if (IS_ERR(usb->button_active)){
+		dev_err(usb->dev, "pinctrl lookup button_active failed\n");
+		ret = -ENODEV;
+	}
+
+	ret = pinctrl_select_state(usb->pinctrl,
+			usb->button_active);
+	if (ret < 0){
+		dev_err(usb->dev, "unable to set active pinctrl state\n");
+	}
+
+exit:
+	return ret;
+}
+
 static int usb_extcon_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -117,7 +196,19 @@ static int usb_extcon_probe(struct platform_device *pdev)
 	if (!info)
 		return -ENOMEM;
 
+	info->enable_button_mode = of_property_read_bool(pdev->dev.of_node,
+			"qcom,enable-button-mode");
 	info->dev = dev;
+	if(info->enable_button_mode){
+		INIT_DELAYED_WORK(&info->debounce_timer, hrtimer_event);
+		ret = gpio_usbdetect_pinctrl_dt(info);
+		if(ret< 0){
+			if(ret == -EPROBE_DEFER)
+				return ret;
+			dev_err(&pdev->dev, "Pinctrl settings may not be complete, button might not work\n");
+		}
+	}
+
 	info->id_gpiod = devm_gpiod_get_optional(&pdev->dev, "id", GPIOD_IN);
 	info->vbus_gpiod = devm_gpiod_get_optional(&pdev->dev, "vbus",
 						   GPIOD_IN);
@@ -184,7 +275,7 @@ static int usb_extcon_probe(struct platform_device *pdev)
 		}
 
 		ret = devm_request_threaded_irq(dev, info->vbus_irq, NULL,
-						usb_irq_handler,
+						info->enable_button_mode ? gpio_usbdetect_button_irq : usb_irq_handler,
 						IRQF_TRIGGER_RISING |
 						IRQF_TRIGGER_FALLING |
 						IRQF_ONESHOT,
@@ -209,6 +300,7 @@ static int usb_extcon_remove(struct platform_device *pdev)
 	struct usb_extcon_info *info = platform_get_drvdata(pdev);
 
 	cancel_delayed_work_sync(&info->wq_detcable);
+	cancel_delayed_work_sync(&info->debounce_timer);
 	device_init_wakeup(&pdev->dev, false);
 
 	return 0;
