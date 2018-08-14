@@ -4,6 +4,7 @@
 #include "msm8953-pinctrl.dtsi"
 #include "pmi8950.dtsi"
 #include "msm8953-pmi8950.dtsi"
+#include "msm8953-mdss-panels.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. APQ8053 Lite SoM";
@@ -193,6 +194,14 @@
 
 &soc {
 	/delete-node/ hbtp;
+};
+
+&mdss_mdp {
+	qcom,mdss-pref-prim-intf = "dsi";
+};
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_boyi_hx83100a_800p_video>;
 };
 
 &blsp1_uart0 {
