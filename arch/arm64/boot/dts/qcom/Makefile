@@ -562,8 +562,6 @@ dtb-$(CONFIG_ARCH_SDM429) += sdm429-mtp.dtb \
 
 endif
 
-dtb-$(CONFIG_ANDROID) += apq8053-lite-som.dtb
-
 always		:= $(dtb-y)
 subdir-y	:= $(dts-dirs)
 clean-files	:= *.dtb
