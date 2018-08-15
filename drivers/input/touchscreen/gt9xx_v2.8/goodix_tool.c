@@ -45,7 +45,8 @@ static struct i2c_client *gt_client;
 static struct proc_dir_entry *goodix_proc_entry;
 
 static ssize_t goodix_tool_read(struct file *, char __user *, size_t, loff_t *);
-static ssize_t goodix_tool_write(struct file *, const char __user *, size_t, loff_t *);
+static ssize_t goodix_tool_write(struct file *, const char __user *,
+						size_t, loff_t *);
 static const struct file_operations gtp_proc_ops = {
 	.owner = THIS_MODULE,
 	.read = goodix_tool_read,
@@ -126,22 +127,22 @@ static s32 tool_i2c_write_with_extra(u8 *buf, u16 len)
 
 static void register_i2c_func(void)
 {
-	/* if (!strncmp(IC_TYPE, "GT818", 5)
-	 *  || !strncmp(IC_TYPE, "GT816", 5)
-	 *  || !strncmp(IC_TYPE, "GT811", 5)
-	 *  || !strncmp(IC_TYPE, "GT818F", 6)
-	 *  || !strncmp(IC_TYPE, "GT827", 5)
-	 *  || !strncmp(IC_TYPE,"GT828", 5)
-	 *  || !strncmp(IC_TYPE, "GT813", 5))
+	/* if (!strcmp(IC_TYPE, "GT818", 5)
+	 *  || !strcmp(IC_TYPE, "GT816", 5)
+	 *  || !strcmp(IC_TYPE, "GT811", 5)
+	 *  || !strcmp(IC_TYPE, "GT818F", 6)
+	 *  || !strcmp(IC_TYPE, "GT827", 5)
+	 *  || !strcmp(IC_TYPE,"GT828", 5)
+	 *  || !strcmp(IC_TYPE, "GT813", 5))
 	 */
-	if (strncmp(IC_TYPE, "GT8110", 6) &&
-	    strncmp(IC_TYPE, "GT8105", 6) &&
-	    strncmp(IC_TYPE, "GT801", 5) &&
-	    strncmp(IC_TYPE, "GT800", 5) &&
-	    strncmp(IC_TYPE, "GT801PLUS", 9) &&
-	    strncmp(IC_TYPE, "GT811", 5) &&
-	    strncmp(IC_TYPE, "GTxxx", 5) &&
-	    strncmp(IC_TYPE, "GT9XX", 5)) {
+	if (strcmp(IC_TYPE, "GT8110") &&
+	    strcmp(IC_TYPE, "GT8105") &&
+	    strcmp(IC_TYPE, "GT801") &&
+	    strcmp(IC_TYPE, "GT800") &&
+	    strcmp(IC_TYPE, "GT801PLUS") &&
+	    strcmp(IC_TYPE, "GT811") &&
+	    strcmp(IC_TYPE, "GTxxx") &&
+	    strcmp(IC_TYPE, "GT9XX")) {
 		tool_i2c_read = tool_i2c_read_with_extra;
 		tool_i2c_write = tool_i2c_write_with_extra;
 		dev_dbg(&gt_client->dev, "I2C function: with pre and end cmd!");
@@ -311,7 +312,7 @@ ssize_t goodix_tool_write(struct file *filp, const char __user *buff,
 		(s32)cmd_head.times, (s32)cmd_head.retry,
 		(s32)cmd_head.delay);
 
-	if (1 == cmd_head.wr) {
+	if (cmd_head.wr == 1) {
 		if (cmd_head.data_len > DATA_LENGTH) {
 			dev_err(&gt_client->dev,
 				"Tool write failed data too long");
@@ -330,13 +331,13 @@ ssize_t goodix_tool_write(struct file *filp, const char __user *buff,
 		GTP_DEBUG_ARRAY(cmd_head.data, cmd_head.data_len +
 				cmd_head.addr_len);
 
-		if (1 == cmd_head.flag) {
-			if (FAIL == comfirm()) {
+		if (cmd_head.flag == 1) {
+			if (comfirm() == FAIL) {
 				dev_err(&gt_client->dev,
 					"[WRITE]Comfirm fail!");
 				return -EPERM;
 			}
-		} else if (2 == cmd_head.flag) {
+		} else if (cmd_head.flag == 2) {
 			/*Need interrupt!*/
 		}
 		if (tool_i2c_write(&cmd_head.data[GTP_ADDR_LENGTH -
@@ -351,7 +352,7 @@ ssize_t goodix_tool_write(struct file *filp, const char __user *buff,
 				cmd_head.data_len + cmd_head.addr_len);
 		if (cmd_head.delay)
 			msleep(cmd_head.delay);
-	} else if (3 == cmd_head.wr) {
+	} else if (cmd_head.wr == 3) {
 		if (cmd_head.data_len > DATA_LENGTH) {
 			dev_err(&gt_client->dev,
 				"Tool write failed data too long");
@@ -366,19 +367,19 @@ ssize_t goodix_tool_write(struct file *filp, const char __user *buff,
 		memcpy(IC_TYPE, cmd_head.data, cmd_head.data_len);
 
 		register_i2c_func();
-	} else if (5 == cmd_head.wr) {
+	} else if (cmd_head.wr == 5) {
 		/*memcpy(IC_TYPE, cmd_head.data, cmd_head.data_len);*/
-	} else if (7 == cmd_head.wr) {/*disable irq!*/
+	} else if (cmd_head.wr == 7) {/*disable irq!*/
 		gtp_work_control_enable(i2c_get_clientdata(gt_client), false);
 
 		if (ts->pdata->esd_protect)
 			gtp_esd_off(ts);
-	} else if (9 == cmd_head.wr) {/*enable irq!*/
+	} else if (cmd_head.wr == 9) {/*enable irq!*/
 		gtp_work_control_enable(i2c_get_clientdata(gt_client), true);
 
 		if (ts->pdata->esd_protect)
 			gtp_esd_on(ts);
-	} else if (17 == cmd_head.wr) {
+	} else if (cmd_head.wr == 17) {
 		if (cmd_head.data_len > DATA_LENGTH) {
 			dev_err(&gt_client->dev,
 				"Tool write failed data too long");
@@ -398,17 +399,17 @@ ssize_t goodix_tool_write(struct file *filp, const char __user *buff,
 			clear_bit(RAW_DATA_MODE, &ts->flags);
 			dev_info(&gt_client->dev, "gtp leave rawdiff.");
 		}
-	} else if (19 == cmd_head.wr) {
+	} else if (cmd_head.wr == 19) {
 		/* add new command: reset guitar */
 		gtp_reset_guitar(gt_client, 20);
 	}
 #ifdef CONFIG_TOUCHSCREEN_GT9XX_UPDATE
-	else if (11 == cmd_head.wr) {/*Enter update mode!*/
-		if (FAIL == gup_enter_update_mode(gt_client))
+	else if (cmd_head.wr == 11) {/*Enter update mode!*/
+		if (gup_enter_update_mode(gt_client) == FAIL)
 			return -EPERM;
-	} else if (13 == cmd_head.wr) {/*Leave update mode!*/
+	} else if (cmd_head.wr == 13) {/*Leave update mode!*/
 		gup_leave_update_mode(gt_client);
-	} else if (15 == cmd_head.wr) {/*Update firmware!*/
+	} else if (cmd_head.wr == 15) {/*Update firmware!*/
 		show_len = 0;
 		total_len = 0;
 		if (cmd_head.data_len > DATA_LENGTH) {
@@ -425,7 +426,7 @@ ssize_t goodix_tool_write(struct file *filp, const char __user *buff,
 			return -EPERM;
 		}
 
-		if (FAIL == gup_update_proc((void *)cmd_head.data))
+		if (gup_update_proc((void *)cmd_head.data) == FAIL)
 			return -EPERM;
 	}
 #endif
@@ -463,12 +464,12 @@ ssize_t goodix_tool_read(struct file *file, char __user *page,
 	} else if (!cmd_head.wr) {
 		u16 len, data_len, loc, addr;
 
-		if (1 == cmd_head.flag) {
-			if (FAIL == comfirm()) {
+		if (cmd_head.flag == 1) {
+			if (comfirm() == FAIL) {
 				dev_err(&gt_client->dev, "[READ]Comfirm fail!");
 				return -EPERM;
 			}
-		} else if (2 == cmd_head.flag) {
+		} else if (cmd_head.flag == 2) {
 			/*Need interrupt!*/
 		}
 
@@ -496,13 +497,13 @@ ssize_t goodix_tool_read(struct file *file, char __user *page,
 			data_len -= len;
 		}
 		return cmd_head.data_len;
-	} else if (2 == cmd_head.wr) {
+	} else if (cmd_head.wr == 2) {
 		ret = simple_read_from_buffer(page, size, ppos,
 					      IC_TYPE, sizeof(IC_TYPE));
 		return ret;
 	}
 #ifdef CONFIG_TOUCHSCREEN_GT9XX_UPDATE
-	else if (4 == cmd_head.wr) {
+	else if (cmd_head.wr == 4) {
 		u8 progress_buf[4];
 
 		progress_buf[0] = show_len >> 8;
@@ -515,9 +516,9 @@ ssize_t goodix_tool_read(struct file *file, char __user *page,
 		return ret;
 	}
 #endif
-	else if (6 == cmd_head.wr) {
+	else if (cmd_head.wr == 6) {
 		/*Read error code!*/
-	} else if (8 == cmd_head.wr) {	/*Read driver version*/
+	} else if (cmd_head.wr == 8) {	/*Read driver version*/
 		ret = simple_read_from_buffer(page, size, ppos,
 					      GTP_DRIVER_VERSION,
 					      strlen(GTP_DRIVER_VERSION));

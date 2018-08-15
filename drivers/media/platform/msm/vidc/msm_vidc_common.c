@@ -2035,6 +2035,7 @@ static void handle_session_flush(enum hal_command_response cmd, void *data)
 	struct msm_vidc_cb_cmd_done *response = data;
 	struct msm_vidc_inst *inst;
 	struct v4l2_event flush_event = {0};
+	struct recon_buf *binfo;
 	u32 *ptr = NULL;
 	enum hal_flush flush_type;
 	int rc;
@@ -2088,6 +2089,13 @@ static void handle_session_flush(enum hal_command_response cmd, void *data)
 		dprintk(VIDC_ERR, "Invalid flush type received!");
 		goto exit;
 	}
+
+	mutex_lock(&inst->reconbufs.lock);
+	list_for_each_entry(binfo, &inst->reconbufs.list, list) {
+		binfo->CR = 0;
+		binfo->CF = 0;
+	}
+	mutex_unlock(&inst->reconbufs.lock);
 
 	dprintk(VIDC_DBG,
 		"Notify flush complete, flush_type: %x\n", flush_type);
@@ -2353,6 +2361,17 @@ int msm_comm_vb2_buffer_done(struct msm_vidc_inst *inst,
 	return 0;
 }
 
+static bool is_heic_encode_session(struct msm_vidc_inst *inst)
+{
+	if (inst->session_type == MSM_VIDC_ENCODER &&
+		(get_hal_codec(inst->fmts[CAPTURE_PORT].fourcc) ==
+		HAL_VIDEO_CODEC_HEVC) &&
+		(inst->img_grid_dimension > 0))
+		return true;
+	else
+		return false;
+}
+
 static bool is_eos_buffer(struct msm_vidc_inst *inst, u32 device_addr)
 {
 	struct eos_buf *temp, *next;
@@ -2398,9 +2417,7 @@ static void handle_ebd(enum hal_command_response cmd, void *data)
 	}
 
 	empty_buf_done = (struct vidc_hal_ebd *)&response->input_done;
-	if ((get_hal_codec(inst->fmts[CAPTURE_PORT].fourcc) ==
-		HAL_VIDEO_CODEC_HEVC) &&
-		(inst->img_grid_dimension > 0) &&
+	if (is_heic_encode_session(inst) &&
 		(empty_buf_done->input_tag < inst->tinfo.count - 1)) {
 		dprintk(VIDC_DBG, "Wait for last tile. Current tile no: %d\n",
 		empty_buf_done->input_tag);
@@ -3145,10 +3162,11 @@ exit:
 static void msm_vidc_print_running_insts(struct msm_vidc_core *core)
 {
 	struct msm_vidc_inst *temp;
+	int op_rate = 0;
 
 	dprintk(VIDC_ERR, "Running instances:\n");
-	dprintk(VIDC_ERR, "%4s|%4s|%4s|%4s|%4s\n",
-			"type", "w", "h", "fps", "prop");
+	dprintk(VIDC_ERR, "%4s|%4s|%4s|%4s|%6s|%4s\n",
+			"type", "w", "h", "fps", "opr", "prop");
 
 	mutex_lock(&core->lock);
 	list_for_each_entry(temp, &core->instances, list) {
@@ -3162,13 +3180,21 @@ static void msm_vidc_print_running_insts(struct msm_vidc_core *core)
 			if (msm_comm_turbo_session(temp))
 				strlcat(properties, "T", sizeof(properties));
 
-			dprintk(VIDC_ERR, "%4d|%4d|%4d|%4d|%4s\n",
+			if (is_realtime_session(temp))
+				strlcat(properties, "R", sizeof(properties));
+
+			if (temp->clk_data.operating_rate)
+				op_rate = temp->clk_data.operating_rate >> 16;
+			else
+				op_rate = temp->prop.fps;
+
+			dprintk(VIDC_ERR, "%4d|%4d|%4d|%4d|%6d|%4s\n",
 					temp->session_type,
 					max(temp->prop.width[CAPTURE_PORT],
 						temp->prop.width[OUTPUT_PORT]),
 					max(temp->prop.height[CAPTURE_PORT],
 						temp->prop.height[OUTPUT_PORT]),
-					temp->prop.fps, properties);
+					temp->prop.fps, op_rate, properties);
 		}
 	}
 	mutex_unlock(&core->lock);
@@ -4416,9 +4442,7 @@ int msm_comm_qbuf(struct msm_vidc_inst *inst, struct msm_vidc_buffer *mbuf)
 		for (c = 0; c < etbs.count; ++c) {
 			struct vidc_frame_data *frame_data = &etbs.data[c];
 
-			if (get_hal_codec(inst->fmts[CAPTURE_PORT].fourcc) ==
-				HAL_VIDEO_CODEC_HEVC &&
-				(inst->img_grid_dimension > 0)) {
+			if (is_heic_encode_session(inst)) {
 				rc = msm_comm_qbuf_heic_tiles(inst, frame_data);
 				if (rc) {
 					dprintk(VIDC_ERR,
@@ -5495,6 +5519,11 @@ int msm_vidc_check_scaling_supported(struct msm_vidc_inst *inst)
 	u32 x_min, x_max, y_min, y_max;
 	u32 input_height, input_width, output_height, output_width;
 	u32 rotation;
+
+	if (is_heic_encode_session(inst)) {
+		dprintk(VIDC_DBG, "Skip downscale check for HEIC\n");
+		return 0;
+	}
 
 	input_height = inst->prop.height[OUTPUT_PORT];
 	input_width = inst->prop.width[OUTPUT_PORT];
@@ -6695,6 +6724,7 @@ void handle_release_buffer_reference(struct msm_vidc_inst *inst,
 	struct msm_vidc_buffer *temp;
 	bool found = false;
 	int i = 0;
+	u32 planes[VIDEO_MAX_PLANES] = {0};
 
 	mutex_lock(&inst->flush_lock);
 	mutex_lock(&inst->registeredbufs.lock);
@@ -6708,6 +6738,10 @@ void handle_release_buffer_reference(struct msm_vidc_inst *inst,
 		}
 	}
 	if (found) {
+		/* save device_addr */
+		for (i = 0; i < mbuf->vvb.vb2_buf.num_planes; i++)
+			planes[i] = mbuf->smem[i].device_addr;
+
 		/* send RBR event to client */
 		msm_vidc_queue_rbr_event(inst,
 			mbuf->vvb.vb2_buf.planes[0].m.fd,
@@ -6726,6 +6760,7 @@ void handle_release_buffer_reference(struct msm_vidc_inst *inst,
 		if (!mbuf->smem[0].refcount) {
 			list_del(&mbuf->list);
 			kref_put_mbuf(mbuf);
+			mbuf = NULL;
 		}
 	} else {
 		print_vidc_buffer(VIDC_ERR, "mbuf not found", inst, mbuf);
@@ -6743,8 +6778,8 @@ void handle_release_buffer_reference(struct msm_vidc_inst *inst,
 	 */
 	found = false;
 	list_for_each_entry(temp, &inst->registeredbufs.list, list) {
-		if (msm_comm_compare_vb2_plane(inst, mbuf,
-				&temp->vvb.vb2_buf, 0)) {
+		if (msm_comm_compare_device_plane(temp, planes, 0)) {
+			mbuf = temp;
 			found = true;
 			break;
 		}
@@ -6764,9 +6799,11 @@ void handle_release_buffer_reference(struct msm_vidc_inst *inst,
 		/* don't queue the buffer */
 		found = false;
 	}
-	/* clear DEFERRED flag, if any, as the buffer is going to be queued */
-	if (found)
+	/* clear required flags as the buffer is going to be queued */
+	if (found) {
 		mbuf->flags &= ~MSM_VIDC_FLAG_DEFERRED;
+		mbuf->flags &= ~MSM_VIDC_FLAG_RBR_PENDING;
+	}
 
 unlock:
 	mutex_unlock(&inst->registeredbufs.lock);

@@ -162,7 +162,7 @@ static struct mutex apps_data_mutex;
 
 #define DIAGPKT_MAX_DELAYED_RSP 0xFFFF
 
-#ifdef DIAG_DEBUG
+#ifdef CONFIG_IPC_LOGGING
 uint16_t diag_debug_mask;
 void *diag_ipc_log;
 #endif
@@ -969,6 +969,9 @@ static int diag_remote_init(void)
 			poolsize_mdm_dci_write);
 	diagmem_setsize(POOL_TYPE_QSC_MUX, itemsize_qsc_usb,
 			poolsize_qsc_usb);
+	diag_md_mdm_init();
+	if (diag_dci_init_remote())
+		return -ENOMEM;
 	driver->hdlc_encode_buf = kzalloc(DIAG_MAX_HDLC_BUF_SIZE, GFP_KERNEL);
 	if (!driver->hdlc_encode_buf)
 		return -ENOMEM;
@@ -3801,7 +3804,7 @@ void diag_ws_release(void)
 		pm_relax(driver->diag_dev);
 }
 
-#ifdef DIAG_DEBUG
+#ifdef CONFIG_IPC_LOGGING
 static void diag_debug_init(void)
 {
 	diag_ipc_log = ipc_log_context_create(DIAG_IPC_LOG_PAGES, "diag", 0);

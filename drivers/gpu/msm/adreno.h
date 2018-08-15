@@ -327,6 +327,29 @@ struct adreno_firmware {
 };
 
 /**
+ * struct adreno_perfcounter_list_node - struct to store perfcounters
+ * allocated by a process on a kgsl fd.
+ * @groupid: groupid of the allocated perfcounter
+ * @countable: countable assigned to the allocated perfcounter
+ * @node: list node for perfcounter_list of a process
+ */
+struct adreno_perfcounter_list_node {
+	unsigned int groupid;
+	unsigned int countable;
+	struct list_head node;
+};
+
+/**
+ * struct adreno_device_private - Adreno private structure per fd
+ * @dev_priv: the kgsl device private structure
+ * @perfcounter_list: list of perfcounters used by the process
+ */
+struct adreno_device_private {
+	struct kgsl_device_private dev_priv;
+	struct list_head perfcounter_list;
+};
+
+/**
  * struct adreno_gpu_core - A specific GPU core definition
  * @gpurev: Unique GPU revision identifier
  * @core: Match for the core version of the GPU
@@ -1808,7 +1831,7 @@ static inline bool is_power_counter_overflow(struct adreno_device *adreno_dev,
 		return ret;
 	}
 	adreno_readreg(adreno_dev, ADRENO_REG_RBBM_PERFCTR_RBBM_0_HI, &val);
-	if (val != *perfctr_pwr_hi) {
+	if (val > *perfctr_pwr_hi) {
 		*perfctr_pwr_hi = val;
 		ret = true;
 	}
@@ -1823,14 +1846,17 @@ static inline unsigned int counter_delta(struct kgsl_device *device,
 	unsigned int ret = 0;
 	bool overflow = true;
 	static unsigned int perfctr_pwr_hi;
+	unsigned int prev_perfctr_pwr_hi = 0;
 
 	/* Read the value */
 	kgsl_regread(device, reg, &val);
 
 	if (adreno_is_a5xx(adreno_dev) && reg == adreno_getreg
-		(adreno_dev, ADRENO_REG_RBBM_PERFCTR_RBBM_0_LO))
+		(adreno_dev, ADRENO_REG_RBBM_PERFCTR_RBBM_0_LO)) {
+		prev_perfctr_pwr_hi = perfctr_pwr_hi;
 		overflow = is_power_counter_overflow(adreno_dev, reg,
 				*counter, &perfctr_pwr_hi);
+	}
 
 	/* Return 0 for the first read */
 	if (*counter != 0) {
@@ -1843,9 +1869,12 @@ static inline unsigned int counter_delta(struct kgsl_device *device,
 			 * Since KGSL got abnormal value from the counter,
 			 * We will drop the value from being accumulated.
 			 */
-			pr_warn_once("KGSL: Abnormal value :0x%x (0x%x) from perf counter : 0x%x\n",
-					val, *counter, reg);
-			return 0;
+			KGSL_DRV_ERR_RATELIMIT(device,
+				"Abnormal value:0x%llx (0x%llx) from perf counter : 0x%x\n",
+				val | ((uint64_t)perfctr_pwr_hi << 32),
+				*counter |
+					((uint64_t)prev_perfctr_pwr_hi << 32),
+				reg);
 		}
 	}
 
@@ -1867,8 +1896,11 @@ static inline int adreno_perfcntr_active_oob_get(
 		ret = gpudev->oob_set(adreno_dev, OOB_PERFCNTR_SET_MASK,
 				OOB_PERFCNTR_CHECK_MASK,
 				OOB_PERFCNTR_CLEAR_MASK);
-		if (ret)
+		if (ret) {
+			adreno_set_gpu_fault(adreno_dev, ADRENO_GMU_FAULT);
+			adreno_dispatcher_schedule(KGSL_DEVICE(adreno_dev));
 			kgsl_active_count_put(KGSL_DEVICE(adreno_dev));
+		}
 	}
 
 	return ret;

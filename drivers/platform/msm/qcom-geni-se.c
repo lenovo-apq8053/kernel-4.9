@@ -317,7 +317,9 @@ static int geni_se_select_fifo_mode(void __iomem *base)
 
 static int geni_se_select_dma_mode(void __iomem *base)
 {
+	int proto = get_se_proto(base);
 	unsigned int geni_dma_mode = 0;
+	unsigned int common_geni_m_irq_en;
 
 	geni_write_reg(0, base, SE_GSI_EVENT_EN);
 	geni_write_reg(0xFFFFFFFF, base, SE_GENI_M_IRQ_CLEAR);
@@ -326,6 +328,12 @@ static int geni_se_select_dma_mode(void __iomem *base)
 	geni_write_reg(0xFFFFFFFF, base, SE_DMA_RX_IRQ_CLR);
 	geni_write_reg(0xFFFFFFFF, base, SE_IRQ_EN);
 
+	common_geni_m_irq_en = geni_read_reg(base, SE_GENI_M_IRQ_EN);
+	if (proto != UART)
+		common_geni_m_irq_en &=
+			~(M_TX_FIFO_WATERMARK_EN | M_RX_FIFO_WATERMARK_EN);
+
+	geni_write_reg(common_geni_m_irq_en, base, SE_GENI_M_IRQ_EN);
 	geni_dma_mode = geni_read_reg(base, SE_GENI_DMA_MODE_EN);
 	geni_dma_mode |= GENI_DMA_MODE_EN;
 	geni_write_reg(geni_dma_mode, base, SE_GENI_DMA_MODE_EN);
@@ -667,9 +675,9 @@ static int geni_se_rmv_ab_ib(struct geni_se_device *geni_se_dev,
 						geni_se_dev->cur_ab,
 						geni_se_dev->cur_ib);
 	GENI_SE_DBG(geni_se_dev->log_ctx, false, NULL,
-		    "%s: %lu:%lu (%lu:%lu) %d\n", __func__,
-		    geni_se_dev->cur_ab, geni_se_dev->cur_ib,
-		    rsc->ab, rsc->ib, bus_bw_update);
+			"%s: %s: cur_ab_ib(%lu:%lu) req_ab_ib(%lu:%lu) %d\n",
+			__func__, dev_name(rsc->ctrl_dev), geni_se_dev->cur_ab,
+			geni_se_dev->cur_ib, rsc->ab, rsc->ib, bus_bw_update);
 	mutex_unlock(&geni_se_dev->geni_dev_lock);
 	return ret;
 }
@@ -765,9 +773,9 @@ static int geni_se_add_ab_ib(struct geni_se_device *geni_se_dev,
 						geni_se_dev->cur_ab,
 						geni_se_dev->cur_ib);
 	GENI_SE_DBG(geni_se_dev->log_ctx, false, NULL,
-		    "%s: %lu:%lu (%lu:%lu) %d\n", __func__,
-		    geni_se_dev->cur_ab, geni_se_dev->cur_ib,
-		    rsc->ab, rsc->ib, bus_bw_update);
+			"%s: %s: cur_ab_ib(%lu:%lu) req_ab_ib(%lu:%lu) %d\n",
+			__func__, dev_name(rsc->ctrl_dev), geni_se_dev->cur_ab,
+			geni_se_dev->cur_ib, rsc->ab, rsc->ib, bus_bw_update);
 	mutex_unlock(&geni_se_dev->geni_dev_lock);
 	return ret;
 }

@@ -69,8 +69,8 @@
 		target-dev = <&cpubw>;
 		cpu-to-dev-map =
 			<  960000  2929 >,
-			< 1305600  5126 >,
-			< 1497600  5859 >,
+			< 1305600  5053 >,
+			< 1497600  5712 >,
 			< 1708800  6445 >,
 			< 1804800  7104 >,
 			< 1958400  7104 >;
@@ -91,7 +91,7 @@
 			target-dev = <&mincpubw>;
 			cpu-to-dev-map =
 				< 1305600 2929 >,
-				< 1804800 5859 >;
+				< 1804800 5712 >;
 		};
 	};
 };
@@ -143,6 +143,16 @@
 		<0xb01101c 0x8>;
 	reg-names = "cc_base", "meas";
 	#clock-cells = <1>;
+};
+
+&soc {
+	devfreq_spdm_cpu {
+		status = "disabled";
+	};
+
+	devfreq_spdm_gov {
+		status = "disabled";
+	};
 };
 
 &soc {
@@ -206,4 +216,13 @@
 	clock-names = "pclk0_src", "byte0_src", "pclk1_src",
 		"byte1_src";
 	#clock-cells = <1>;
+};
+
+/* GPU overrides */
+&msm_gpu {
+	/* Update GPU chip ID*/
+	qcom,chipid = <0x05000400>;
+
+	/* disable mem pools */
+	/delete-node/qcom,gpu-mempools;
 };

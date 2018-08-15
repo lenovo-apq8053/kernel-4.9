@@ -14,13 +14,9 @@
 /dts-v1/;
 /plugin/;
 
-#include <dt-bindings/gpio/gpio.h>
-#include <dt-bindings/clock/msm-clocks-8953.h>
-#include <dt-bindings/interrupt-controller/arm-gic.h>
 #include "sdm439-mtp.dtsi"
 
 / {
 	model = "MTP";
 	qcom,board-id = <8 1>;
-	qcom,msm-id = <353 0x0>;
 };

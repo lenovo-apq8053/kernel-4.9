@@ -24,6 +24,10 @@ enum qg_sdam_param {
 	SDAM_IBAT_UA,
 	SDAM_TIME_SEC,
 	SDAM_PON_OCV_UV,
+	SDAM_ESR_CHARGE_DELTA,
+	SDAM_ESR_DISCHARGE_DELTA,
+	SDAM_ESR_CHARGE_SF,
+	SDAM_ESR_DISCHARGE_SF,
 	SDAM_MAX,
 };
 
@@ -37,5 +41,7 @@ int qg_sdam_write(u8 param, u32 data);
 int qg_sdam_read(u8 param, u32 *data);
 int qg_sdam_write_all(u32 *sdam_data);
 int qg_sdam_read_all(u32 *sdam_data);
+int qg_sdam_multibyte_write(u32 offset, u8 *sdam_data, u32 length);
+int qg_sdam_multibyte_read(u32 offset, u8 *sdam_data, u32 length);
 
 #endif

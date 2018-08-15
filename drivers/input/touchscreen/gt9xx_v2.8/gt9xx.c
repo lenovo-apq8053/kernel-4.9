@@ -98,8 +98,10 @@ int gtp_i2c_read(struct i2c_client *client, u8 *buf, int len)
 		msgs[0].buf[1] = address & 0xFF;
 		msgs[1].len = transfer_length;
 		for (retry = 0; retry < RETRY_MAX_TIMES; retry++) {
-			if (likely(i2c_transfer(client->adapter, msgs, 2) == 2)) {
-				memcpy(&buf[2 + pos], msgs[1].buf, transfer_length);
+			if (likely(i2c_transfer(client->adapter,
+					msgs, 2) == 2)) {
+				memcpy(&buf[2 + pos], msgs[1].buf,
+					transfer_length);
 				pos += transfer_length;
 				address += transfer_length;
 				break;
@@ -158,8 +160,10 @@ int gtp_i2c_write(struct i2c_client *client, u8 *buf, int len)
 
 	len -= GTP_ADDR_LENGTH;
 	while (pos != len) {
-		if (unlikely(len - pos > I2C_MAX_TRANSFER_SIZE - GTP_ADDR_LENGTH))
-			transfer_length = I2C_MAX_TRANSFER_SIZE - GTP_ADDR_LENGTH;
+		if (unlikely(len - pos > I2C_MAX_TRANSFER_SIZE
+						- GTP_ADDR_LENGTH))
+			transfer_length = I2C_MAX_TRANSFER_SIZE
+						- GTP_ADDR_LENGTH;
 		else
 			transfer_length = len - pos;
 		msg.buf[0] = (unsigned char)((address >> 8) & 0xFF);
@@ -167,12 +171,14 @@ int gtp_i2c_write(struct i2c_client *client, u8 *buf, int len)
 		msg.len = transfer_length + 2;
 		memcpy(&msg.buf[2], &buf[2 + pos], transfer_length);
 		for (retry = 0; retry < RETRY_MAX_TIMES; retry++) {
-			if (likely(i2c_transfer(client->adapter, &msg, 1) == 1)) {
+			if (likely(i2c_transfer(client->adapter,
+					&msg, 1) == 1)) {
 				pos += transfer_length;
 				address += transfer_length;
 				break;
 			}
-			dev_dbg(&client->dev, "I2C write retry[%d]\n", retry + 1);
+			dev_dbg(&client->dev, "I2C write retry[%d]\n",
+					retry + 1);
 			usleep_range(2000, 2100);
 		}
 		if (unlikely(retry == RETRY_MAX_TIMES)) {
@@ -414,7 +420,8 @@ static u8 gtp_get_points(struct goodix_ts_data *ts,
 			points[i].id = 10;
 			if (ts->pdata->pen_suppress_finger) {
 				points[0] = points[i];
-				memset(++points, 0, sizeof(*points) * (GTP_MAX_TOUCH_ID - 1));
+				memset(++points, 0, sizeof(*points) *
+					(GTP_MAX_TOUCH_ID - 1));
 				finger_state &= 0xf0;
 				finger_state |= 0x01;
 				break;
@@ -446,13 +453,16 @@ static void gtp_type_a_report(struct goodix_ts_data *ts, u8 touch_num,
 
 	for (i = 0; i < ts->pdata->max_touch_id; i++) {
 		if (touch_num && i == points->id) {
-			input_report_abs(ts->input_dev, ABS_MT_TRACKING_ID, points->id);
+			input_report_abs(ts->input_dev,
+					ABS_MT_TRACKING_ID, points->id);
 
 			if (points->tool_type == GTP_TOOL_PEN) {
-				input_report_key(ts->input_dev, BTN_TOOL_PEN, true);
+				input_report_key(ts->input_dev,
+							BTN_TOOL_PEN, true);
 				pre_pen_id = points->id;
 			} else {
-				input_report_key(ts->input_dev, BTN_TOOL_FINGER, true);
+				input_report_key(ts->input_dev,
+							BTN_TOOL_FINGER, true);
 			}
 			input_report_abs(ts->input_dev, ABS_MT_POSITION_X,
 					 points->x);
@@ -468,11 +478,13 @@ static void gtp_type_a_report(struct goodix_ts_data *ts, u8 touch_num,
 			points++;
 		} else if (pre_touch & 0x01 << i) {
 			if (pre_pen_id == i) {
-				input_report_key(ts->input_dev, BTN_TOOL_PEN, false);
-				/* valid id will < 10, so id to 0xff to indicate a invalid state */
+				input_report_key(ts->input_dev,
+							BTN_TOOL_PEN, false);
+/* valid id will < 10, so id to 0xff to indicate a invalid state */
 				pre_pen_id = 0xff;
 			} else {
-				input_report_key(ts->input_dev, BTN_TOOL_FINGER, false);
+				input_report_key(ts->input_dev,
+					BTN_TOOL_FINGER, false);
 			}
 		}
 	}
@@ -503,7 +515,7 @@ static void gtp_mt_slot_report(struct goodix_ts_data *ts, u8 touch_num,
 				pre_pen_id = points->id;
 			} else {
 				input_mt_report_slot_state(ts->input_dev,
-							   MT_TOOL_FINGER, true);
+						MT_TOOL_FINGER, true);
 			}
 			input_report_abs(ts->input_dev, ABS_MT_POSITION_X,
 					 points->x);
@@ -527,7 +539,7 @@ static void gtp_mt_slot_report(struct goodix_ts_data *ts, u8 touch_num,
 				pre_pen_id = 0xff;
 			} else {
 				input_mt_report_slot_state(ts->input_dev,
-							   MT_TOOL_FINGER, false);
+						MT_TOOL_FINGER, false);
 			}
 		}
 	}
@@ -903,7 +915,7 @@ static int gtp_find_valid_cfg_data(struct goodix_ts_data *ts)
 	/* read sensor id */
 	ret = gtp_i2c_read_dbl_check(ts->client, GTP_REG_SENSOR_ID,
 				     &sensor_id, 1);
-	if (SUCCESS != ret || sensor_id >= 0x06) {
+	if (ret != SUCCESS || sensor_id >= 0x06) {
 		dev_err(&ts->client->dev,
 			"Failed get valid sensor_id(0x%02X), No Config Sent\n",
 			sensor_id);
@@ -985,7 +997,7 @@ static s32 gtp_init_panel(struct goodix_ts_data *ts)
 
 	/* check firmware */
 	ret = gtp_i2c_read_dbl_check(ts->client, 0x41E4, opr_buf, 1);
-	if (SUCCESS == ret) {
+	if (ret == SUCCESS) {
 		if (opr_buf[0] != 0xBE) {
 			set_bit(FW_ERROR, &ts->flags);
 			dev_err(&ts->client->dev,
@@ -1037,10 +1049,8 @@ static ssize_t gtp_config_read_proc(struct file *file, char __user *page,
 	struct goodix_config_data *cfg = &ts->pdata->config;
 
 	ptr = kzalloc(4096, GFP_KERNEL);
-	if (!ptr) {
-		dev_err(&ts->client->dev, "Failed alloc memory for config\n");
+	if (!ptr)
 		return -ENOMEM;
-	}
 
 	data_len += snprintf(ptr + data_len, 4096 - data_len,
 			     "====init value====\n");
@@ -1134,15 +1144,12 @@ static ssize_t gtp_config_write_proc(struct file *filp,
 	}
 
 	temp_buf = kzalloc(count, GFP_KERNEL);
-	if (!temp_buf) {
-		dev_err(&ts->client->dev, "failed alloc temp memory");
+	if (!temp_buf)
 		return -ENOMEM;
-	}
 
 	file_config = kzalloc(GTP_CONFIG_MAX_LENGTH + GTP_ADDR_LENGTH,
 			      GFP_KERNEL);
 	if (!file_config) {
-		dev_err(&ts->client->dev, "failed alloc config memory");
 		kfree(temp_buf);
 		return -ENOMEM;
 	}
@@ -1389,7 +1396,7 @@ s32 gtp_get_fw_info(struct i2c_client *client, struct goodix_fw_info *fw_info)
 	fw_info->sensor_id = 0xff;
 	ret = gtp_i2c_read_dbl_check(client, GTP_REG_SENSOR_ID,
 				     &fw_info->sensor_id, 1);
-	if (SUCCESS != ret || fw_info->sensor_id >= 0x06) {
+	if (ret != SUCCESS || fw_info->sensor_id >= 0x06) {
 		dev_err(&client->dev,
 			"Failed get valid sensor_id(0x%02X), No Config Sent\n",
 			fw_info->sensor_id);
@@ -2016,8 +2023,6 @@ static void gtp_shutdown(struct i2c_client *client)
 
 	gtp_work_control_enable(data, false);
 	gtp_power_off(data);
-
-	return;
 }
 
 static int gtp_probe(struct i2c_client *client, const struct i2c_device_id *id)
@@ -2037,14 +2042,11 @@ static int gtp_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	}
 
 	ts = devm_kzalloc(&client->dev, sizeof(*ts), GFP_KERNEL);
-	if (!ts) {
-		dev_err(&client->dev, "Failed alloc ts memory");
+	if (!ts)
 		return -ENOMEM;
-	}
 
 	pdata = devm_kzalloc(&client->dev, sizeof(*pdata), GFP_KERNEL);
 	if (!pdata) {
-		dev_err(&client->dev, "Failed alloc pdata memory\n");
 		devm_kfree(&client->dev, ts);
 		return -EINVAL;
 	}

@@ -1,25 +1,29 @@
 /* Himax Android Driver Sample Code for Himax chipset
- *
- * Copyright (C) 2015 Himax Corporation.
- *
- * This software is licensed under the terms of the GNU General Public
- * License version 2, as published by the Free Software Foundation, and
- * may be copied, distributed, and modified under those terms.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- */
+*
+* Copyright (C) 2015 Himax Corporation.
+*
+* This software is licensed under the terms of the GNU General Public
+* License version 2, as published by the Free Software Foundation, and
+* may be copied, distributed, and modified under those terms.
+*
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+* GNU General Public License for more details.
+*
+*/
 
 #ifndef HIMAX_COMMON_H
 #define HIMAX_COMMON_H
 
-#include <asm/segment.h>
+#include "himax_platform.h"
 
+#include <asm/segment.h>
+/*#include <asm/uaccess.h>*/
+/*#include <asm/atomic.h>*/
 #include <linux/uaccess.h>
 #include <linux/atomic.h>
+
 #include <linux/delay.h>
 #include <linux/i2c.h>
 #include <linux/input.h>
@@ -36,7 +40,6 @@
 #include <linux/buffer_head.h>
 #include <linux/seq_file.h>
 #include <linux/proc_fs.h>
-#include <linux/hrtimer.h>
 
 #if defined(CONFIG_FB)
 #include <linux/notifier.h>
@@ -48,7 +51,7 @@
 #ifdef CONFIG_OF
 #include <linux/of_gpio.h>
 #endif
-#define HIMAX_DRIVER_VER "0.2.4.0"
+#define HIMAX_DRIVER_VER "0.3.1.0"
 
 #define FLASH_DUMP_FILE "/data/user/Flash_Dump.bin"
 #define DIAG_COORDINATE_FILE "/sdcard/Coordinate_Dump.csv"
@@ -58,55 +61,56 @@
 #define HX_TP_PROC_DIAG
 #define HX_TP_PROC_REGISTER
 #define HX_TP_PROC_DEBUG
+#define HX_TP_PROC_FLASH_DUMP
 #define HX_TP_PROC_SELF_TEST
 #define HX_TP_PROC_RESET
 #define HX_TP_PROC_SENSE_ON_OFF
-//#define HX_TP_PROC_2T2R
+/*#define HX_TP_PROC_2T2R*/
 
 int himax_touch_proc_init(void);
 void himax_touch_proc_deinit(void);
 #endif
 
-//===========Himax Option function=============
-//#define HX_RST_PIN_FUNC
-//#define HX_AUTO_UPDATE_FW
-//#define HX_HIGH_SENSE
-//#define HX_SMART_WAKEUP
-//#define HX_USB_DETECT
-//#define HX_ESD_WORKAROUND
-//#define HX_USB_DETECT2
+/*===========Himax Option function=============*/
+/*#define HX_RST_PIN_FUNC*/
+#define HX_AUTO_UPDATE_FW
+/*#define HX_HIGH_SENSE*/
+/*#define HX_SMART_WAKEUP*/
+/*#define HX_USB_DETECT*/
+/*#define HX_ESD_WORKAROUND*/
+/*#define HX_USB_DETECT2*/
+/*#define HX_EN_SEL_BUTTON*//* Support Self Virtual key ,default is close*/
+#define HX_EN_MUT_BUTTON/*  Support Mutual Virtual Key ,default is close*/
+/*#define HX_EN_CHECK_PATCH*/
 
-//#define HX_EN_SEL_BUTTON	// Support Self Virtual key, default is close
-#define HX_EN_MUT_BUTTON	// Support Mutual Virtual Key, default is close
+#define HX_KEY_MAX_COUNT  4
+#define DEFAULT_RETRY_CNT 3
 
-#define HX_KEY_MAX_COUNT             4
-#define DEFAULT_RETRY_CNT            3
-
-#define HX_VKEY_0   KEY_BACK
-#define HX_VKEY_1   KEY_HOME
-#define HX_VKEY_2   KEY_RESERVED
-#define HX_VKEY_3   KEY_RESERVED
-#define HX_KEY_ARRAY    {HX_VKEY_0, HX_VKEY_1, HX_VKEY_2, HX_VKEY_3}
+#define HX_VKEY_0 KEY_BACK
+#define HX_VKEY_1 KEY_HOME
+#define HX_VKEY_2 KEY_RESERVED
+#define HX_VKEY_3 KEY_RESERVED
+#define HX_KEY_ARRAY {HX_VKEY_0, HX_VKEY_1, HX_VKEY_2, HX_VKEY_3}
 
 #define SHIFTBITS 5
-//#define FLASH_SIZE 131072
-#define  FW_SIZE_60k	61440
-#define  FW_SIZE_64k	65536
-#define  FW_SIZE_124k	126976
-#define  FW_SIZE_128k	131072
+/*#define FLASH_SIZE 131072*/
+#define  FW_SIZE_60k  61440
+#define  FW_SIZE_64k  65536
+#define  FW_SIZE_124k 126976
+#define  FW_SIZE_128k 131072
 
 struct himax_ic_data {
 	int vendor_fw_ver;
 	int vendor_config_ver;
 	int vendor_sensor_id;
-	int HX_RX_NUM;
-	int HX_TX_NUM;
-	int HX_BT_NUM;
-	int HX_X_RES;
-	int HX_Y_RES;
-	int HX_MAX_PT;
-	bool HX_XY_REVERSE;
-	bool HX_INT_IS_EDGE;
+	int		HX_RX_NUM;
+	int		HX_TX_NUM;
+	int		HX_BT_NUM;
+	int		HX_X_RES;
+	int		HX_Y_RES;
+	int		HX_MAX_PT;
+	bool	HX_XY_REVERSE;
+	bool	HX_INT_IS_EDGE;
 #ifdef HX_TP_PROC_2T2R
 	int HX_RX_NUM_2;
 	int HX_TX_NUM_2;
@@ -182,12 +186,12 @@ struct himax_ts_data {
 	bool suspended;
 	bool probe_done;
 	struct mutex fb_mutex;
+	struct mutex rw_lock;
 	atomic_t suspend_mode;
 	uint8_t x_channel;
 	uint8_t y_channel;
 	uint8_t useScreenRes;
 	uint8_t diag_command;
-
 	uint8_t protocol_type;
 	uint8_t first_pressed;
 	uint8_t coord_data_size;
@@ -197,11 +201,9 @@ struct himax_ts_data {
 	uint8_t nFinger_support;
 	uint8_t irq_enabled;
 	uint8_t diag_self[50];
-
 	uint16_t finger_pressed;
 	uint16_t last_slot;
 	uint16_t pre_finger_mask;
-
 	uint32_t debug_log_level;
 	uint32_t widthFactor;
 	uint32_t heightFactor;
@@ -233,6 +235,11 @@ struct himax_ts_data {
 	struct early_suspend early_suspend;
 #endif
 
+#ifdef HX_TP_PROC_FLASH_DUMP
+	struct workqueue_struct *flash_wq;
+	struct work_struct flash_work;
+#endif
+
 #ifdef HX_RST_PIN_FUNC
 	int rst_gpio;
 #endif
@@ -244,7 +251,7 @@ struct himax_ts_data {
 #ifdef HX_SMART_WAKEUP
 	uint8_t SMWP_enable;
 	uint8_t gesture_cust_en[16];
-	struct wake_lock ts_SMWP_wake_lock;
+	struct wakeup_source ts_SMWP_wake_lock;
 	struct workqueue_struct *himax_smwp_wq;
 	struct delayed_work smwp_work;
 #endif
@@ -267,37 +274,37 @@ struct himax_ts_data {
 	struct pinctrl_state *pinctrl_state_release;
 };
 
-#define HX_CMD_NOP                  0x00
-#define HX_CMD_SETMICROOFF          0x35
-#define HX_CMD_SETROMRDY            0x36
-#define HX_CMD_TSSLPIN              0x80
-#define HX_CMD_TSSLPOUT             0x81
-#define HX_CMD_TSSOFF               0x82
-#define HX_CMD_TSSON                0x83
-#define HX_CMD_ROE                  0x85
-#define HX_CMD_RAE                  0x86
-#define HX_CMD_RLE                  0x87
-#define HX_CMD_CLRES                0x88
-#define HX_CMD_TSSWRESET            0x9E
-#define HX_CMD_SETDEEPSTB           0xD7
-#define HX_CMD_SET_CACHE_FUN        0xDD
-#define HX_CMD_SETIDLE              0xF2
-#define HX_CMD_SETIDLEDELAY         0xF3
-#define HX_CMD_SELFTEST_BUFFER      0x8D
-#define HX_CMD_MANUALMODE           0x42
-#define HX_CMD_FLASH_ENABLE         0x43
-#define HX_CMD_FLASH_SET_ADDRESS    0x44
-#define HX_CMD_FLASH_WRITE_REGISTER 0x45
-#define HX_CMD_FLASH_SET_COMMAND    0x47
-#define HX_CMD_FLASH_WRITE_BUFFER   0x48
-#define HX_CMD_FLASH_PAGE_ERASE     0x4D
-#define HX_CMD_FLASH_SECTOR_ERASE   0x4E
-#define HX_CMD_CB                   0xCB
-#define HX_CMD_EA                   0xEA
-#define HX_CMD_4A                   0x4A
-#define HX_CMD_4F                   0x4F
-#define HX_CMD_B9                   0xB9
-#define HX_CMD_76                   0x76
+#define HX_CMD_NOP					 0x00
+#define HX_CMD_SETMICROOFF			 0x35
+#define HX_CMD_SETROMRDY			 0x36
+#define HX_CMD_TSSLPIN				 0x80
+#define HX_CMD_TSSLPOUT				 0x81
+#define HX_CMD_TSSOFF				 0x82
+#define HX_CMD_TSSON				 0x83
+#define HX_CMD_ROE					 0x85
+#define HX_CMD_RAE					 0x86
+#define HX_CMD_RLE					 0x87
+#define HX_CMD_CLRES				 0x88
+#define HX_CMD_TSSWRESET			 0x9E
+#define HX_CMD_SETDEEPSTB			 0xD7
+#define HX_CMD_SET_CACHE_FUN		 0xDD
+#define HX_CMD_SETIDLE				 0xF2
+#define HX_CMD_SETIDLEDELAY			 0xF3
+#define HX_CMD_SELFTEST_BUFFER		 0x8D
+#define HX_CMD_MANUALMODE			 0x42
+#define HX_CMD_FLASH_ENABLE			 0x43
+#define HX_CMD_FLASH_SET_ADDRESS	 0x44
+#define HX_CMD_FLASH_WRITE_REGISTER  0x45
+#define HX_CMD_FLASH_SET_COMMAND	 0x47
+#define HX_CMD_FLASH_WRITE_BUFFER	 0x48
+#define HX_CMD_FLASH_PAGE_ERASE		 0x4D
+#define HX_CMD_FLASH_SECTOR_ERASE	 0x4E
+#define HX_CMD_CB					 0xCB
+#define HX_CMD_EA					 0xEA
+#define HX_CMD_4A					 0x4A
+#define HX_CMD_4F					 0x4F
+#define HX_CMD_B9					 0xB9
+#define HX_CMD_76					 0x76
 
 enum input_protocol_type {
 	PROTOCOL_TYPE_A	= 0x00,
@@ -319,32 +326,32 @@ void himax_set_HSEN_func(struct i2c_client *client, uint8_t HSEN_enable);
 static int gest_pt_cnt;
 static int gest_pt_x[GEST_PT_MAX_NUM];
 static int gest_pt_y[GEST_PT_MAX_NUM];
-static int gest_start_x = 0, gest_start_y = 0, gest_end_x = 0, gest_end_y;
-static int gest_width = 0, gest_height = 0, gest_mid_x = 0, gest_mid_y;
+static int gest_start_x, gest_start_y, gest_end_x, gest_end_y;
+static int gest_width, gest_height, gest_mid_x, gest_mid_y;
 static int gn_gesture_coor[16];
 #endif
 
 void himax_set_SMWP_func(struct i2c_client *client, uint8_t SMWP_enable);
 extern bool FAKE_POWER_KEY_SEND;
 
-enum gesture_event_type {
-	EV_GESTURE_01 = 0x01,
-	EV_GESTURE_02,
-	EV_GESTURE_03,
-	EV_GESTURE_04,
-	EV_GESTURE_05,
-	EV_GESTURE_06,
-	EV_GESTURE_07,
-	EV_GESTURE_08,
-	EV_GESTURE_09,
-	EV_GESTURE_10,
-	EV_GESTURE_11,
-	EV_GESTURE_12,
-	EV_GESTURE_13,
-	EV_GESTURE_14,
-	EV_GESTURE_15,
-	EV_GESTURE_PWR = 0x80,
-};
+	enum gesture_event_type {
+		EV_GESTURE_01 = 0x01,
+		EV_GESTURE_02,
+		EV_GESTURE_03,
+		EV_GESTURE_04,
+		EV_GESTURE_05,
+		EV_GESTURE_06,
+		EV_GESTURE_07,
+		EV_GESTURE_08,
+		EV_GESTURE_09,
+		EV_GESTURE_10,
+		EV_GESTURE_11,
+		EV_GESTURE_12,
+		EV_GESTURE_13,
+		EV_GESTURE_14,
+		EV_GESTURE_15,
+		EV_GESTURE_PWR = 0x80,
+	};
 
 #define KEY_CUST_01 251
 #define KEY_CUST_02 252
@@ -364,36 +371,101 @@ enum gesture_event_type {
 #endif
 
 #ifdef HX_ESD_WORKAROUND
-extern	u8 HX_ESD_RESET_ACTIVATE;
+	extern	u8 HX_ESD_RESET_ACTIVATE;
 #endif
 
-extern struct himax_ts_data *private_ts;
-extern struct himax_ic_data *ic_data;
 extern int irq_enable_count;
 
-void himax_ts_work(struct himax_ts_data *ts);
+#ifdef QCT
 irqreturn_t himax_ts_thread(int irq, void *ptr);
 int himax_input_register(struct himax_ts_data *ts);
-void himax_ts_init(struct himax_ts_data *ts);
+#endif
 
-extern int himax_chip_common_probe(struct i2c_client *client,
-				const struct i2c_device_id *id);
-extern int himax_chip_common_remove(struct i2c_client *client);
-extern int himax_chip_common_suspend(struct himax_ts_data *ts);
-extern int himax_chip_common_resume(struct himax_ts_data *ts);
+int himax_chip_common_probe(struct i2c_client *client,
+const struct i2c_device_id *id);
+int himax_chip_common_remove(struct i2c_client *client);
+int himax_chip_common_suspend(struct himax_ts_data *ts);
+int himax_chip_common_resume(struct himax_ts_data *ts);
 int himax_loadSensorConfig(struct i2c_client *client,
-				struct himax_i2c_platform_data *pdata);
-
-enum hrtimer_restart himax_ts_timer_func(struct hrtimer *timer);
+struct himax_i2c_platform_data *pdata);
 
 #ifdef HX_USB_DETECT2
-//extern kal_bool upmu_is_chr_det(void);
+/*extern kal_bool upmu_is_chr_det(void);*/
 void himax_cable_detect_func(void);
 #endif
 
-#ifdef HX_RST_PIN_FUNC
-extern void himax_HW_reset(uint8_t loadconfig, uint8_t int_off);
+#ifdef HX_AUTO_UPDATE_FW
+extern unsigned long	FW_VER_MAJ_FLASH_ADDR;
+extern unsigned long	FW_VER_MIN_FLASH_ADDR;
+extern unsigned long	CFG_VER_MAJ_FLASH_ADDR;
+extern unsigned long	CFG_VER_MIN_FLASH_ADDR;
 #endif
+extern unsigned long	FW_VER_MAJ_FLASH_LENG;
+extern unsigned long	FW_VER_MIN_FLASH_LENG;
+extern unsigned long	CFG_VER_MAJ_FLASH_LENG;
+extern unsigned long	CFG_VER_MIN_FLASH_LENG;
+extern unsigned char	IC_TYPE;
+extern unsigned char	IC_CHECKSUM;
+
+#if defined(CONFIG_TOUCHSCREEN_HIMAX_DEBUG)
+extern int himax_touch_proc_init(void);
+extern void himax_touch_proc_deinit(void);
+/*PROC-START*/
+#ifdef HX_TP_PROC_FLASH_DUMP
+extern void	himax_ts_flash_func(void);
+extern void setFlashBuffer(void);
+extern bool getFlashDumpGoing(void);
+extern uint8_t getSysOperation(void);
+extern void setSysOperation(uint8_t operation);
+#endif
+
+#ifdef HX_TP_PROC_HITOUCH
+extern bool hitouch_is_connect;
+#endif
+
+#ifdef HX_TP_PROC_DIAG
+	extern int touch_monitor_stop_flag;
+
+	extern int touch_monitor_stop_limit;
+
+	extern void	himax_ts_diag_func(void);
+
+	extern int16_t *getMutualBuffer(void);
+	extern int16_t *getMutualNewBuffer(void);
+	extern int16_t *getMutualOldBuffer(void);
+	extern int16_t *getSelfBuffer(void);
+	extern uint8_t getXChannel(void);
+	extern uint8_t getYChannel(void);
+	extern uint8_t getDiagCommand(void);
+	extern void setXChannel(uint8_t x);
+	extern void setYChannel(uint8_t y);
+	extern void setMutualBuffer(void);
+	extern void setMutualNewBuffer(void);
+	extern void setMutualOldBuffer(void);
+	extern uint8_t coordinate_dump_enable;
+	extern struct file *coordinate_fn;
+	extern uint8_t diag_coor[128];
+#ifdef HX_TP_PROC_2T2R
+	extern int16_t *getMutualBuffer_2(void);
+	extern uint8_t getXChannel_2(void);
+	extern uint8_t getYChannel_2(void);
+	extern void setXChannel_2(uint8_t x);
+	extern void setYChannel_2(uint8_t y);
+	extern void setMutualBuffer_2(void);
+#endif
+#endif
+/*PROC-END*/
+#endif
+
+#ifdef HX_USB_DETECT2
+	extern bool USB_Flag;
+#endif
+#ifdef HX_ESD_WORKAROUND
+	extern void HX_report_ESD_event(void);
+	unsigned char ESD_00_counter = 0;
+	unsigned char ESD_00_Flag = 0;
+#endif
+bool himax_ts_init(struct himax_ts_data *ts);
 
 #endif
 

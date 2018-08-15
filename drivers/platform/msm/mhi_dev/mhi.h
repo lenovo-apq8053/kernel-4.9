@@ -484,7 +484,13 @@ struct mhi_dev_channel {
 	struct mutex			ch_lock;
 	/* client which the current inbound/outbound message is for */
 	struct mhi_dev_client		*active_client;
-
+	/*
+	 * Pointer to event request structs used to temporarily store
+	 * completion events and meta data before sending them to host
+	 */
+	struct event_req		*ereqs;
+	/* Pointer to completion event buffers */
+	union mhi_dev_ring_element_type *tr_events;
 	struct list_head		event_req_buffers;
 	struct event_req		*curr_ereq;
 
@@ -605,6 +611,8 @@ struct mhi_dev {
 
 	/*Register for interrupt */
 	bool				mhi_int;
+	bool				mhi_int_en;
+
 	/* Registered client callback list */
 	struct list_head		client_cb_list;
 
@@ -690,8 +698,8 @@ enum mhi_client_channel {
 	MHI_CLIENT_DUN_IN = 33,
 	MHI_CLIENT_IP_SW_0_OUT = 34,
 	MHI_CLIENT_IP_SW_0_IN = 35,
-	MHI_CLIENT_IP_SW_1_OUT = 36,
-	MHI_CLIENT_IP_SW_1_IN = 37,
+	MHI_CLIENT_ADB_OUT = 36,
+	MHI_CLIENT_ADB_IN = 37,
 	MHI_CLIENT_IP_SW_2_OUT = 38,
 	MHI_CLIENT_IP_SW_2_IN = 39,
 	MHI_CLIENT_IP_SW_3_OUT = 40,
@@ -702,7 +710,7 @@ enum mhi_client_channel {
 	MHI_CLIENT_SMCT_IN = 45,
 	MHI_CLIENT_IP_SW_4_OUT  = 46,
 	MHI_CLIENT_IP_SW_4_IN  = 47,
-	MHI_MAX_SOFTWARE_CHANNELS = 48,
+	MHI_MAX_SOFTWARE_CHANNELS,
 	MHI_CLIENT_TEST_OUT = 60,
 	MHI_CLIENT_TEST_IN = 61,
 	MHI_CLIENT_RESERVED_1_LOWER = 62,
@@ -712,6 +720,7 @@ enum mhi_client_channel {
 	MHI_CLIENT_RESERVED_2_LOWER = 102,
 	MHI_CLIENT_RESERVED_2_UPPER = 127,
 	MHI_MAX_CHANNELS = 102,
+	MHI_CLIENT_INVALID = 0xFFFFFFFF
 };
 
 /* Use ID 0 for legacy /dev/mhi_ctrl. Channel 0 is used for internal only */
