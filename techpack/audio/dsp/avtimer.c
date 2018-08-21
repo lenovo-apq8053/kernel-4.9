@@ -317,6 +317,43 @@ int avcs_core_query_timer(uint64_t *avtimer_tick)
 }
 EXPORT_SYMBOL(avcs_core_query_timer);
 
+/* This function will return the offset between system clock & avtimer clock
+   which can then be used to map timestamps coming from avtimer in system time
+   context. Also adsp state doesn't needed to be checked in this function as it
+   would be made sure in caller context */
+
+int avcs_core_query_timer_offset(int64_t *av_offset)
+{
+	uint32_t avtimer_msw = 0, avtimer_lsw = 0;
+	uint32_t res = 0;
+	uint64_t avtimer_tick_temp, sys_time = 0;
+	struct timespec ts = {0};
+
+	mutex_lock(&avtimer.avtimer_lock);
+	if ((avtimer.p_avtimer_lsw == NULL)||(avtimer.p_avtimer_msw == NULL))
+	{
+		mutex_unlock(&avtimer.avtimer_lock);
+		return -EINVAL;
+	}
+
+	avtimer_lsw = ioread32(avtimer.p_avtimer_lsw);
+	avtimer_msw = ioread32(avtimer.p_avtimer_msw);
+
+	ktime_get_ts(&ts);
+	mutex_unlock(&avtimer.avtimer_lock);
+
+	sys_time = ts.tv_sec * 1000000LL + div64_u64(ts.tv_nsec, 1000);
+	avtimer_tick_temp = (uint64_t)((uint64_t)avtimer_msw << 32) | avtimer_lsw;
+
+	res = do_div(avtimer_tick_temp, avtimer.clk_div);
+	*av_offset = sys_time - avtimer_tick_temp;
+	pr_debug_ratelimited("%s:Avtimer: sys_time: %llu, avtime %llu offset %lld\n",
+			__func__,
+			sys_time, avtimer_tick_temp, *av_offset);
+	return 0;
+}
+EXPORT_SYMBOL(avcs_core_query_timer_offset);
+
 #if IS_ENABLED(CONFIG_AVTIMER_LEGACY)
 static void avcs_set_isp_fptr(bool enable)
 {
