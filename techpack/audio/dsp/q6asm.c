@@ -1806,12 +1806,18 @@ static void q6asm_process_mtmx_get_param_rsp(struct audio_client *ac,
 		switch (cmdrsp->param_info.param_id) {
 		case ASM_SESSION_MTMX_STRTR_PARAM_SESSION_TIME_V3:
 			time = &cmdrsp->param_data.session_time;
-			dev_vdbg(ac->dev, "%s: GET_TIME_V3, time_lsw=%x, time_msw=%x\n",
+			dev_vdbg(ac->dev, "%s: GET_TIME_V3, time_lsw=%x, time_msw=%x, abs l %x, m %x\n",
 				 __func__, time->session_time_lsw,
-				 time->session_time_msw);
-			ac->time_stamp = (uint64_t)(((uint64_t)
+				 time->session_time_msw, time->absolute_time_lsw, time->absolute_time_msw);
+			ac->dsp_ts.abs_time_stamp = (uint64_t)(((uint64_t)
+							time->absolute_time_msw << 32) |
+							time->absolute_time_lsw);
+			ac->dsp_ts.time_stamp = (uint64_t)(((uint64_t)
 					 time->session_time_msw << 32) |
 					 time->session_time_lsw);
+			ac->dsp_ts.last_time_stamp = (uint64_t)(((uint64_t)
+					 time->time_stamp_msw << 32) |
+					 time->time_stamp_lsw);
 			if (time->flags &
 			    ASM_SESSION_MTMX_STRTR_PARAM_STIME_TSTMP_FLG_BMASK)
 				dev_warn_ratelimited(ac->dev,
@@ -2228,7 +2234,7 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 		dev_vdbg(ac->dev, "%s: ASM_SESSION_CMDRSP_GET_SESSIONTIME_V3, payload[0] = %d, payload[1] = %d, payload[2] = %d\n",
 				 __func__,
 				 payload[0], payload[1], payload[2]);
-		ac->time_stamp = (uint64_t)(((uint64_t)payload[2] << 32) |
+		ac->dsp_ts.time_stamp = (uint64_t)(((uint64_t)payload[2] << 32) |
 				payload[1]);
 		if (atomic_cmpxchg(&ac->time_flag, 1, 0))
 			wake_up(&ac->time_wait);
@@ -8831,7 +8837,7 @@ EXPORT_SYMBOL(q6asm_write_nolock);
  *
  * Returns 0 on success or error on failure
  */
-int q6asm_get_session_time(struct audio_client *ac, uint64_t *tstamp)
+int q6asm_get_session_time_v2(struct audio_client *ac, uint64_t *ses_time, uint64_t *abs_time)
 {
 	struct asm_mtmx_strtr_get_params mtmx_params;
 	int rc;
@@ -8844,8 +8850,8 @@ int q6asm_get_session_time(struct audio_client *ac, uint64_t *tstamp)
 		pr_err("%s: AC APR handle NULL\n", __func__);
 		return -EINVAL;
 	}
-	if (tstamp == NULL) {
-		pr_err("%s: tstamp NULL\n", __func__);
+	if (ses_time == NULL) {
+		pr_err("%s: tstamp args are NULL\n", __func__);
 		return -EINVAL;
 	}
 
@@ -8881,11 +8887,19 @@ int q6asm_get_session_time(struct audio_client *ac, uint64_t *tstamp)
 		goto fail_cmd;
 	}
 
-	*tstamp = ac->time_stamp;
+	*ses_time = ac->dsp_ts.time_stamp;
+	if(abs_time != NULL)
+		*abs_time = ac->dsp_ts.abs_time_stamp;
 	return 0;
 
 fail_cmd:
 	return -EINVAL;
+}
+EXPORT_SYMBOL(q6asm_get_session_time_v2);
+
+int q6asm_get_session_time(struct audio_client *ac, uint64_t *tstamp)
+{
+	return q6asm_get_session_time_v2(ac, tstamp, NULL);
 }
 EXPORT_SYMBOL(q6asm_get_session_time);
 
@@ -8937,7 +8951,7 @@ int q6asm_get_session_time_legacy(struct audio_client *ac, uint64_t *tstamp)
 		goto fail_cmd;
 	}
 
-	*tstamp = ac->time_stamp;
+	*tstamp = ac->dsp_ts.time_stamp;
 	return 0;
 
 fail_cmd:
