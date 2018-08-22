@@ -97,6 +97,15 @@
 					qcom,amux-route = <1>;
 				};
 			};
+
+			mpp3_therm {
+				mpp3_therm_default: mpp3_therm_default {
+					pins = "mpp3";
+					function = "analog";
+					input-enable;
+					qcom,amux-route = <2>;
+				};
+			};
 		};
 
 		pm8953_gpios: gpios {
@@ -130,7 +139,7 @@
 			qcom,vadc-poll-eoc;
 			#thermal-sensor-cells = <1>;
 			pinctrl-names = "default";
-			pinctrl-0 = <&pa_therm1_default &cas_therm_default>;
+			pinctrl-0 = <&pa_therm1_default &cas_therm_default &mpp3_therm_default>;
 
 			chan@5 {
 				label = "vcoin";
@@ -220,6 +229,16 @@
 				qcom,fast-avg-setup = <0>;
 			};
 
+			chan@12 {
+				label = "mpp3_adc";
+				reg = <0x12>;
+				qcom,decimation = <0>;
+				qcom,pre-div-channel-scaling = <0>;
+				qcom,calibration-type = "ratiometric";
+				qcom,scale-function = <2>;
+				qcom,hw-settle-time = <2>;
+				qcom,fast-avg-setup = <0>;
+			};
 
 			chan@32 {
 				label = "xo_therm";
