@@ -11,43 +11,6 @@
 	qcom,board-id= <0x56 0x30>;
 };
 
-&pm8953_mpps {
-	mpp@a100 {
-		reg = <0xa100 0x100>;
-		qcom,pin-num = <2>;
-		qcom,mode = <4>; // A-input
-		qcom,invert = <1>; /* Enable MPP */
-		qcom,ain-route = <1>; // QPNP_PIN_AIN_AMUX_CH6 = 1 for MPP2
-		qcom,master-en = <1>; //Enable MPP
-		qcom,src-sel = <0>; /* Function constant */
-		status = "okay";
-	};
-
-	mpp@a200 {
-		/* MPP3 - PA_THERM config */
-		reg = <0xa200 0x100>;
-		com,pin-num = <3>;
-		qcom,mode = <4>; /* AIN input */
-		qcom,invert = <1>; /* Enable MPP */
-		qcom,ain-route = <2>; /* AMUX 7 */
-		qcom,master-en = <1>;
-		qcom,src-sel = <0>; /* Function constant */
-		status = "okay";
-	};
-
-	mpp@a300 {
-		/* MPP4 - CASE_THERM config */
-		reg = <0xa300 0x100>;
-		com,pin-num = <4>;
-		qcom,mode = <4>; /* AIN input */
-		qcom,invert = <1>; /* Enable MPP */
-		qcom,ain-route = <3>; /* AMUX 8 */
-		qcom,master-en = <1>;
-		qcom,src-sel = <0>; /* Function constant */
-		status = "okay";
-	};
-};
-
 &tlmm {
 	button_active: button_active {
 		mux {
