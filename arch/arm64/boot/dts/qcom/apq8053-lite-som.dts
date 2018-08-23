@@ -1,3 +1,16 @@
+/*
+ * Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
 /dts-v1/;
 
 #include "apq8053-lite.dtsi"
@@ -209,6 +222,11 @@
 	pinctrl-0 = <&uart_console_active>;
 };
 
+
+&blsp2_uart0 {
+	status = "okay";
+};
+
 &sdhc_1 {
 	/* device core power supply */
 	vdd-supply = <&pm8953_l8>;
@@ -248,7 +266,6 @@
 			output-high;
 		};
 	};
-
 	sdc2_wlan_gpio_off: sdc2_wlan_gpio_off {
 		mux {
 			pins = "gpio75";
@@ -275,9 +292,10 @@
 	qcom,nonremovable;
 
 	pinctrl-names = "active", "sleep";
-	pinctrl-0 = <&sdc2_clk_on &sdc2_cmd_on &sdc2_data_on &sdc2_wlan_gpio_on>;
+	pinctrl-0 = <&sdc2_clk_on &sdc2_cmd_on &sdc2_data_on
+			&sdc2_wlan_gpio_on>;
 	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off
-		 &sdc2_wlan_gpio_off>;
+			&sdc2_wlan_gpio_off>;
 
 	qcom,clk-rates = <400000 20000000 25000000 50000000 100000000>;
 	qcom,bus-speed-mode = "SDR12", "SDR25", "SDR50", "DDR50", "SDR104";
