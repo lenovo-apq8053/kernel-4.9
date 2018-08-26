@@ -83,6 +83,8 @@ static int msm_digcdc_clock_control(bool flag)
 	if (flag) {
 		mutex_lock(&pdata->cdc_int_mclk0_mutex);
 		if (atomic_read(&pdata->int_mclk0_enabled) == false) {
+			if (msm_dig_cdc->regmap->cache_only == true)
+				return ret;
 			pdata->digital_cdc_core_clk.clk_freq_in_hz =
 							DEFAULT_MCLK_RATE;
 			pdata->digital_cdc_core_clk.enable = 1;
@@ -96,8 +98,7 @@ static int msm_digcdc_clock_control(bool flag)
 				 * Avoid access to lpass register
 				 * as clock enable failed during SSR.
 				 */
-				if (ret == -ENODEV)
-					msm_dig_cdc->regmap->cache_only = true;
+				msm_dig_cdc->regmap->cache_only = true;
 				return ret;
 			}
 			pr_debug("enabled digital codec core clk\n");
@@ -1022,6 +1023,7 @@ static int msm_dig_cdc_event_notify(struct notifier_block *block,
 	struct msm_dig_priv *msm_dig_cdc = snd_soc_codec_get_drvdata(codec);
 	struct msm_asoc_mach_data *pdata = NULL;
 	int ret = -EINVAL;
+	struct msm_cap_mode *capmode = NULL;
 
 	pdata = snd_soc_card_get_drvdata(codec->component.card);
 
@@ -1105,6 +1107,9 @@ static int msm_dig_cdc_event_notify(struct notifier_block *block,
 		break;
 	case DIG_CDC_EVENT_SSR_DOWN:
 		regcache_cache_only(msm_dig_cdc->regmap, true);
+		mutex_lock(&pdata->cdc_int_mclk0_mutex);
+		atomic_set(&pdata->int_mclk0_enabled, false);
+		mutex_unlock(&pdata->cdc_int_mclk0_mutex);
 		break;
 	case DIG_CDC_EVENT_SSR_UP:
 		regcache_cache_only(msm_dig_cdc->regmap, false);
@@ -1131,6 +1136,11 @@ static int msm_dig_cdc_event_notify(struct notifier_block *block,
 				AFE_PORT_ID_PRIMARY_MI2S_RX,
 				&pdata->digital_cdc_core_clk);
 		mutex_unlock(&pdata->cdc_int_mclk0_mutex);
+		break;
+	case DIG_CDC_EVENT_CAP_CONFIGURE:
+		capmode = (struct msm_cap_mode *)data;
+		capmode->micbias1_cap_mode = pdata->micbias1_cap_mode;
+		capmode->micbias2_cap_mode = pdata->micbias2_cap_mode;
 		break;
 	case DIG_CDC_EVENT_INVALID:
 	default:
@@ -1994,7 +2004,8 @@ static int msm_dig_cdc_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "%s ioremap failed\n", __func__);
 		return -ENOMEM;
 	}
-	msm_dig_cdc->regmap = devm_regmap_init_mmio_clk(&pdev->dev, NULL,
+	msm_dig_cdc->regmap =
+		devm_regmap_init_mmio_clk(&pdev->dev, NULL,
 			msm_dig_cdc->dig_base, &msm_digital_regmap_config);
 
 	msm_dig_cdc->update_clkdiv = pdata->update_clkdiv;

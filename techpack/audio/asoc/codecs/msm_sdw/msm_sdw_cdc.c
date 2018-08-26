@@ -82,8 +82,8 @@ static const struct msm_sdw_reg_mask_val msm_sdw_spkr_default[] = {
 	{MSM_SDW_COMPANDER8_CTL3, 0x80, 0x80},
 	{MSM_SDW_COMPANDER7_CTL7, 0x01, 0x01},
 	{MSM_SDW_COMPANDER8_CTL7, 0x01, 0x01},
-	{MSM_SDW_BOOST0_BOOST_CTL, 0x7C, 0x50},
-	{MSM_SDW_BOOST1_BOOST_CTL, 0x7C, 0x50},
+	{MSM_SDW_BOOST0_BOOST_CTL, 0x7C, 0x58},
+	{MSM_SDW_BOOST1_BOOST_CTL, 0x7C, 0x58},
 };
 
 static const struct msm_sdw_reg_mask_val msm_sdw_spkr_mode1[] = {
@@ -323,7 +323,8 @@ static int msm_sdw_ahb_write_device(struct msm_sdw_priv *msm_sdw,
 {
 	u32 temp = (u32)(*value) & 0x000000FF;
 
-	if (!msm_sdw->dev_up) {
+	if (!msm_sdw->dev_up ||
+	    !q6core_is_adsp_ready()) {
 		dev_err_ratelimited(msm_sdw->dev, "%s: q6 not ready\n",
 				    __func__);
 		return 0;
@@ -338,7 +339,8 @@ static int msm_sdw_ahb_read_device(struct msm_sdw_priv *msm_sdw,
 {
 	u32 temp;
 
-	if (!msm_sdw->dev_up) {
+	if (!msm_sdw->dev_up ||
+	    !q6core_is_adsp_ready()) {
 		dev_err_ratelimited(msm_sdw->dev, "%s: q6 not ready\n",
 				    __func__);
 		return 0;
@@ -1705,8 +1707,8 @@ static const struct msm_sdw_reg_mask_val msm_sdw_reg_init[] = {
 	{MSM_SDW_BOOST1_BOOST_CFG1, 0x3F, 0x12},
 	{MSM_SDW_BOOST1_BOOST_CFG2, 0x1C, 0x08},
 	{MSM_SDW_COMPANDER8_CTL7, 0x1E, 0x18},
-	{MSM_SDW_BOOST0_BOOST_CTL, 0x70, 0x50},
-	{MSM_SDW_BOOST1_BOOST_CTL, 0x70, 0x50},
+	{MSM_SDW_BOOST0_BOOST_CTL, 0x7C, 0x58},
+	{MSM_SDW_BOOST1_BOOST_CTL, 0x7C, 0x58},
 	{MSM_SDW_RX7_RX_PATH_CFG1, 0x08, 0x08},
 	{MSM_SDW_RX8_RX_PATH_CFG1, 0x08, 0x08},
 	{MSM_SDW_TOP_TOP_CFG1, 0x02, 0x02},
@@ -1756,8 +1758,12 @@ static int msm_sdw_notifier_service_cb(struct notifier_block *nb,
 			initial_boot = false;
 			break;
 		}
+		mutex_lock(&msm_sdw->cdc_int_mclk1_mutex);
 		msm_sdw->int_mclk1_enabled = false;
+		mutex_unlock(&msm_sdw->cdc_int_mclk1_mutex);
 		msm_sdw->dev_up = false;
+		snd_soc_card_change_online_state(
+			msm_sdw->codec->component.card, 0);
 		for (i = 0; i < msm_sdw->nr; i++)
 			swrm_wcd_notify(msm_sdw->sdw_ctrl_data[i].sdw_pdev,
 					SWR_DEVICE_DOWN, NULL);
@@ -1792,6 +1798,8 @@ powerup:
 			regcache_sync(msm_sdw->regmap);
 			msm_sdw_set_spkr_mode(msm_sdw->codec,
 					      msm_sdw->spkr_mode);
+			snd_soc_card_change_online_state(
+				msm_sdw->codec->component.card, 1);
 		}
 		break;
 	default:
@@ -1957,7 +1965,8 @@ static int msm_sdw_probe(struct platform_device *pdev)
 	int adsp_state;
 
 	adsp_state = apr_get_subsys_state();
-	if (adsp_state != APR_SUBSYS_LOADED) {
+	if (adsp_state != APR_SUBSYS_LOADED ||
+		!q6core_is_adsp_ready()) {
 		dev_err(&pdev->dev, "Adsp is not loaded yet %d\n",
 				adsp_state);
 		return -EPROBE_DEFER;

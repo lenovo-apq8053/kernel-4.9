@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -232,7 +232,7 @@ static int msm_qti_pp_put_eq_band_audio_mixer(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-#ifdef CONFIG_QTI_PP
+#if IS_ENABLED(CONFIG_QTI_PP)
 void msm_qti_pp_send_eq_values(int fedai_id)
 {
 	if (eq_data[fedai_id].enable)
@@ -753,7 +753,7 @@ static int msm_qti_pp_asphere_send_params(int port_id, int copp_idx, bool force)
 	return 0;
 }
 
-#if defined(CONFIG_QTI_PP) && defined(CONFIG_QTI_PP_AUDIOSPHERE)
+#if IS_ENABLED(CONFIG_QTI_PP) && IS_ENABLED(CONFIG_QTI_PP_AUDIOSPHERE)
 int msm_qti_pp_asphere_init(int port_id, int copp_idx)
 {
 	int index = adm_validate_and_get_port_index(port_id);
@@ -999,8 +999,9 @@ int msm_adsp_inform_mixer_ctl(struct snd_soc_pcm_runtime *rtd,
 
 	event_data = (struct msm_adsp_event_data *)payload;
 	kctl->info(kctl, &kctl_info);
-	if (sizeof(struct msm_adsp_event_data)
-		+ event_data->payload_len > kctl_info.count) {
+
+	if (event_data->payload_len >
+		kctl_info.count - sizeof(struct msm_adsp_event_data)) {
 		pr_err("%s: payload length exceeds limit of %u bytes.\n",
 			__func__, kctl_info.count);
 		ret = -EINVAL;
@@ -1385,7 +1386,7 @@ static const struct snd_kcontrol_new asphere_mixer_controls[] = {
 	0xFFFFFFFF, 0, 2, msm_qti_pp_asphere_get, msm_qti_pp_asphere_set),
 };
 
-#ifdef CONFIG_QTI_PP
+#if IS_ENABLED(CONFIG_QTI_PP)
 void msm_qti_pp_add_controls(struct snd_soc_platform *platform)
 {
 	snd_soc_add_platform_controls(platform, int_fm_vol_mixer_controls,

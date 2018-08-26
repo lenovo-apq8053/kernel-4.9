@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -974,9 +974,8 @@ struct adm_cmd_connect_afe_port_v5 {
 #define INT_FM_TX 0x3005
 #define RT_PROXY_PORT_001_RX	0x2000
 #define RT_PROXY_PORT_001_TX	0x2001
+#define AFE_LOOPBACK_TX	0x6001
 #define DISPLAY_PORT_RX	0x6020
-
-#define AFE_LOOPBACK_TX			0x6001
 
 #define AFE_PORT_INVALID 0xFFFF
 #define SLIMBUS_INVALID AFE_PORT_INVALID
@@ -2541,6 +2540,18 @@ struct afe_param_id_slimbus_cfg {
 /* Minor version used for tracking USB audio  configuration */
 #define AFE_API_MINIOR_VERSION_USB_AUDIO_CONFIG 0x1
 
+/* ID of the parameter used to set the latency mode of the
+ * USB audio device.
+ */
+#define AFE_PARAM_ID_PORT_LATENCY_MODE_CONFIG  0x000102B3
+
+/* Minor version used for tracking USB audio latency mode */
+#define AFE_API_MINOR_VERSION_USB_AUDIO_LATENCY_MODE 0x1
+
+/* Supported AFE port latency modes */
+#define AFE_PORT_DEFAULT_LATENCY_MODE     0x0
+#define AFE_PORT_LOW_LATENCY_MODE         0x1
+
 /* Payload of the AFE_PARAM_ID_USB_AUDIO_DEV_PARAMS parameter used by
  * AFE_MODULE_AUDIO_DEV_INTERFACE.
  */
@@ -2561,6 +2572,17 @@ struct afe_param_id_usb_audio_dev_lpcm_fmt {
 /* Endianness of actual end USB audio device */
 	u32                  endian;
 } __packed;
+
+struct afe_param_id_usb_audio_dev_latency_mode {
+/* Minor version used for tracking USB audio device parameter.
+ * Supported values: AFE_API_MINOR_VERSION_USB_AUDIO_LATENCY_MODE
+ */
+	u32                  minor_version;
+/* latency mode for the USB audio device */
+	u32                  mode;
+} __packed;
+
+
 
 /* ID of the parameter used by AFE_PARAM_ID_USB_AUDIO_CONFIG to configure
  * USB audio interface. It should be used with AFE_MODULE_AUDIO_DEV_INTERFACE
@@ -2607,7 +2629,9 @@ struct afe_param_id_usb_audio_cfg {
 /* device token of actual end USB aduio device */
 	u32                  dev_token;
 /* endianness of this interface */
-	u32                   endian;
+	u32                  endian;
+/* service interval */
+	u32                  service_interval;
 } __packed;
 
 struct afe_usb_audio_dev_param_command {
@@ -2617,6 +2641,7 @@ struct afe_usb_audio_dev_param_command {
 	union {
 		struct afe_param_id_usb_audio_dev_params usb_dev;
 		struct afe_param_id_usb_audio_dev_lpcm_fmt lpcm_fmt;
+		struct afe_param_id_usb_audio_dev_latency_mode latency_config;
 	};
 } __packed;
 
@@ -9393,6 +9418,7 @@ struct asm_aptx_dec_fmt_blk_v2 {
 #define AVCS_CMDRSP_GET_FWK_VERSION (0x0001292D)
 
 #define AVCS_SERVICE_ID_ALL (0xFFFFFFFF)
+#define AVCS_SERVICE_ID_AFE (0x4)
 #define APRV2_IDS_SERVICE_ID_ADSP_CVP_V	(0xB)
 
 struct avcs_get_fwk_version {
