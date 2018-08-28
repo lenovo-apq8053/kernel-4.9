@@ -1242,7 +1242,7 @@ static void wcd_cpe_cmi_afe_cb(const struct cmi_api_notification *param)
 		return;
 	}
 
-	if (param->event != CPE_SVC_CMI_MSG) {
+	if (param->event != CMI_API_MSG) {
 		pr_err("%s: unhandled event 0x%x\n",
 			__func__, param->event);
 		return;
@@ -2094,7 +2094,7 @@ static void wcd_cpe_cmi_lsm_callback(const struct cmi_api_notification *param)
 		return;
 	}
 
-	if (param->event != CPE_SVC_CMI_MSG) {
+	if (param->event != CMI_API_MSG) {
 		pr_err("%s: unhandled event 0x%x\n", __func__, param->event);
 		return;
 	}

@@ -25,6 +25,7 @@
 #include <dsp/q6audio-v2.h>
 #include <ipc/apr_tal.h>
 #include "adsp_err.h"
+#include <dsp/q6core.h>
 
 #define WAKELOCK_TIMEOUT	5000
 enum {
@@ -131,6 +132,7 @@ static struct afe_ctl this_afe;
 
 #define TIMEOUT_MS 1000
 #define Q6AFE_MAX_VOLUME 0x3FFF
+#define HS_USB_INTERVAL_US 125
 
 static int pcm_afe_instance[2];
 static int proxy_afe_instance[2];
@@ -749,7 +751,7 @@ int afe_q6_interface_prepare(void)
 			0xFFFFFFFF, &this_afe);
 		if (this_afe.apr == NULL) {
 			pr_err("%s: Unable to register AFE\n", __func__);
-			ret = -ENODEV;
+			ret = -ENETRESET;
 		}
 		rtac_set_afe_handle(this_afe.apr);
 	}
@@ -2969,6 +2971,25 @@ int afe_port_send_usb_dev_param(u16 port_id, union afe_port_config *afe_config)
 		pr_err("%s: AFE device param cmd LPCM_FMT failed %d\n",
 			__func__, ret);
 		ret = -EINVAL;
+		goto exit;
+	}
+
+	config.pdata.param_id = AFE_PARAM_ID_PORT_LATENCY_MODE_CONFIG;
+	config.pdata.param_size = sizeof(config.latency_config);
+	config.latency_config.minor_version =
+		AFE_API_MINOR_VERSION_USB_AUDIO_LATENCY_MODE;
+	if (afe_config->usb_audio.service_interval > 0 &&
+		afe_config->usb_audio.service_interval <= HS_USB_INTERVAL_US)
+		config.latency_config.mode = AFE_PORT_LOW_LATENCY_MODE;
+	else
+		config.latency_config.mode = AFE_PORT_DEFAULT_LATENCY_MODE;
+
+	ret = afe_apr_send_pkt(&config, &this_afe.wait[index]);
+	if (ret) {
+		pr_debug("%s: AFE device param cmd latency mode failed %d\n",
+			__func__, ret);
+		/* latency mode is an optimization, not a requirement */
+		ret = 0;
 		goto exit;
 	}
 
@@ -6337,6 +6358,47 @@ int afe_set_lpass_clock_v2(u16 port_id, struct afe_clk_set *cfg)
 	return ret;
 }
 EXPORT_SYMBOL(afe_set_lpass_clock_v2);
+
+static int afe_get_service_ver(void)
+{
+	int ret = 0;
+	size_t ver_size;
+	struct avcs_fwk_ver_info *ver_info = NULL;
+
+	ver_size = sizeof(struct avcs_get_fwk_version) +
+			sizeof(struct avs_svc_api_info);
+	ver_info = kzalloc(ver_size, GFP_KERNEL);
+	if (ver_info == NULL)
+		return -ENOMEM;
+
+	ret = q6core_get_service_version(AVCS_SERVICE_ID_AFE, ver_info, ver_size);
+	if (ret)
+		pr_err("%s: q6core_get_service_version failed %d\n",
+		       __func__, ret);
+
+	return ret;
+}
+
+enum lpass_clk_ver afe_get_lpass_clk_ver(void)
+{
+	enum lpass_clk_ver lpass_clk_ver;
+
+	/*
+	 * Use different APIs to set the LPASS clock depending on the AFE
+	 * version. On success afe_get_service_ver returns 0 signyfing the
+	 * latest AFE version is supported. Use LPASS clock version 2 if the
+	 * latest AFE version is supported, otherwise use LPASS clock version 1.
+	 */
+	lpass_clk_ver = (afe_get_service_ver() == 0) ?
+		LPASS_CLK_VER_2 : LPASS_CLK_VER_1;
+
+	pr_debug("%s: returning %s\n", __func__,
+		 (lpass_clk_ver == LPASS_CLK_VER_2) ?
+			"LPASS_CLK_VER_2" : "LPASS_CLK_VER_1");
+
+	return lpass_clk_ver;
+}
+EXPORT_SYMBOL(afe_get_lpass_clk_ver);
 
 int afe_set_lpass_internal_digital_codec_clock(u16 port_id,
 			struct afe_digital_clk_cfg *cfg)

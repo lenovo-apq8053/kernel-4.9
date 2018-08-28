@@ -78,6 +78,8 @@ const DECLARE_TLV_DB_LINEAR(msm_compr_vol_gain, 0,
 
 #define MAX_NUMBER_OF_STREAMS 2
 
+int avcs_core_query_timer_offset(int64_t *av_offset);
+
 struct msm_compr_gapless_state {
 	bool set_next_stream_id;
 	int32_t stream_opened[MAX_NUMBER_OF_STREAMS];
@@ -541,7 +543,7 @@ static int msm_compr_read_buffer(struct msm_compr_audio *prtd)
 		return ret;
 	}
 	prtd->bytes_read += buffer_length;
-	prtd->bytes_read_offset += buffer_length;
+	prtd->bytes_read_offset += buffer_length + prtd->ts_header_offset;
 	if (prtd->bytes_read_offset >= prtd->buffer_size)
 		prtd->bytes_read_offset -= prtd->buffer_size;
 
@@ -2990,16 +2992,13 @@ static int msm_compr_get_metadata(struct snd_compr_stream *cstream,
 	struct msm_compr_audio *prtd;
 	struct audio_client *ac;
 	int ret = -EINVAL;
-
+	uint64_t ses_time = 0, frames = 0, abs_time = 0;
+	uint64_t *val = NULL, *val1 = NULL;
+	int64_t av_offset = 0;
 	pr_debug("%s\n", __func__);
 
 	if (!metadata || !cstream || !cstream->runtime)
 		return ret;
-
-	if (metadata->key != SNDRV_COMPRESS_PATH_DELAY) {
-		pr_err("%s, unsupported key %d\n", __func__, metadata->key);
-		return ret;
-	}
 
 	prtd = cstream->runtime->private_data;
 	if (!prtd || !prtd->audio_client) {
@@ -3007,17 +3006,40 @@ static int msm_compr_get_metadata(struct snd_compr_stream *cstream,
 		return ret;
 	}
 
-	ac = prtd->audio_client;
-	ret = q6asm_get_path_delay(prtd->audio_client);
-	if (ret) {
-		pr_err("%s: get_path_delay failed, ret=%d\n", __func__, ret);
-		return ret;
+	switch(metadata->key)
+	{
+		case SNDRV_COMPRESS_PATH_DELAY:
+			ac = prtd->audio_client;
+			ret = q6asm_get_path_delay(prtd->audio_client);
+			if (ret) {
+				pr_err("%s: get_path_delay failed, ret=%d\n", __func__, ret);
+				return ret;
+			}
+
+			pr_debug("%s, path delay(in us) %u\n", __func__, ac->path_delay);
+			metadata->value[0] = ac->path_delay;
+			break;
+		case SNDRV_COMPRESS_DSP_POSITION:
+			ac = prtd->audio_client;
+			ret = q6asm_get_session_time_v2(prtd->audio_client, &ses_time, &abs_time);
+			if (ret) {
+				pr_err("%s: q6asm_get_session_time_v2 failed, ret=%d\n", __func__, ret);
+				return ret;
+			}
+			frames = div64_u64((ses_time * prtd->sample_rate), 1000000);
+
+			ret = avcs_core_query_timer_offset(&av_offset);
+
+			val = (uint64_t *) &metadata->value[0];
+			*val = frames; val1 = val + 1;
+
+			*val1 = abs_time + av_offset;
+			pr_debug("%s, vals f %lld, t %lld, avoff %lld, abst %lld, sess_time %llu sr %d\n",
+					__func__, *val, *val1, av_offset, abs_time, ses_time, prtd->sample_rate);
+			break;
+		default:
+			pr_err("%s, unsupported key %d\n", __func__, metadata->key);
 	}
-
-	pr_debug("%s, path delay(in us) %u\n", __func__, ac->path_delay);
-
-	metadata->value[0] = ac->path_delay;
-
 	return ret;
 }
 
@@ -3691,8 +3713,8 @@ static int msm_compr_adsp_stream_cmd_put(struct snd_kcontrol *kcontrol,
 		goto done;
 	}
 
-	if ((sizeof(struct msm_adsp_event_data) + event_data->payload_len) >=
-					sizeof(ucontrol->value.bytes.data)) {
+	if (event_data->payload_len > sizeof(ucontrol->value.bytes.data)
+			- sizeof(struct msm_adsp_event_data)) {
 		pr_err("%s param length=%d  exceeds limit",
 			__func__, event_data->payload_len);
 		ret = -EINVAL;

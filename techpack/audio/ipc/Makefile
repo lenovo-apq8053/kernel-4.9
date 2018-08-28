@@ -19,6 +19,16 @@ endif
 ifeq ($(CONFIG_ARCH_SDM450), y)
 	TARGET_KERNEL_VERSION := 4.9
 endif
+ifeq ($(CONFIG_ARCH_SDM439), y)
+	TARGET_KERNEL_VERSION := 4.9
+endif
+ifeq ($(CONFIG_ARCH_MSM8909), y)
+	TARGET_KERNEL_VERSION := 4.9
+endif
+
+ifeq ($(CONFIG_ARCH_MSM8917), y)
+	TARGET_KERNEL_VERSION := 4.9
+endif
 KDIR := $(TOP)/kernel/msm-$(TARGET_KERNEL_VERSION)
 
 ifeq ($(KERNEL_BUILD), 1)
@@ -38,11 +48,26 @@ ifeq ($(KERNEL_BUILD), 0)
 		INCS    +=  -include $(AUDIO_ROOT)/config/sdm845autoconf.h
 	endif
 	ifeq ($(CONFIG_ARCH_SDM670), y)
-		include $(AUDIO_ROOT)/config/sdm670auto.conf
+		include $(AUDIO_ROOT)/config/sdm710auto.conf
 		export
-		INCS    +=  -include $(AUDIO_ROOT)/config/sdm670autoconf.h
+		INCS    +=  -include $(AUDIO_ROOT)/config/sdm710autoconf.h
 	endif
 	ifeq ($(CONFIG_ARCH_SDM450), y)
+		include $(AUDIO_ROOT)/config/sdm450auto.conf
+		export
+		INCS    +=  -include $(AUDIO_ROOT)/config/sdm450autoconf.h
+	endif
+	ifeq ($(CONFIG_ARCH_SDM439), y)
+		include $(AUDIO_ROOT)/config/sdm450auto.conf
+		export
+		INCS    +=  -include $(AUDIO_ROOT)/config/sdm450autoconf.h
+	endif
+	ifeq ($(CONFIG_ARCH_MSM8909), y)
+		include $(AUDIO_ROOT)/config/msm8909auto.conf
+		export
+		INCS    +=  -include $(AUDIO_ROOT)/config/msm8909autoconf.h
+	endif
+	ifeq ($(CONFIG_ARCH_MSM8917), y)
 		include $(AUDIO_ROOT)/config/sdm450auto.conf
 		export
 		INCS    +=  -include $(AUDIO_ROOT)/config/sdm450autoconf.h
@@ -81,6 +106,13 @@ APRV_GLINK += apr_tal.o
 APRV_GLINK += apr_dummy.o
 endif
 
+ifdef CONFIG_MSM_QDSP6_APRV3
+APRV_GLINK += apr.o
+APRV_GLINK += apr_v3.o
+APRV_GLINK += apr_tal.o
+APRV_GLINK += apr_dummy.o
+endif
+
 ifdef CONFIG_MSM_QDSP6_APRV2_GLINK
 APRV_GLINK += apr.o
 APRV_GLINK += apr_v2.o
@@ -93,6 +125,12 @@ APRV_GLINK += apr.o
 APRV_GLINK += apr_v3.o
 APRV_GLINK += apr_tal_glink.o
 APRV_GLINK += apr_dummy.o
+endif
+
+ifeq ($(CONFIG_ARCH_MSM8909), $(CONFIG_MSM_BGCOM))
+	ifdef CONFIG_MSM_BG_GLINK
+	BG_GLINK += bg_glink.o
+	endif
 endif
 
 ifdef CONFIG_WCD_DSP_GLINK
@@ -122,7 +160,7 @@ KBUILD_CPPFLAGS += $(CDEFINES)
 ifeq ($(KERNEL_BUILD), 0)
 
 HEADER_INSTALL_DIR := $(TOP)/kernel/msm-$(TARGET_KERNEL_VERSION)/scripts
-UAPI_OUT := $(OUT)/obj/techpack/audio/include
+UAPI_OUT := $(OUT)/obj/vendor/qcom/opensource/audio-kernel/include
 $(shell $(HEADER_INSTALL_DIR)/headers_install.sh $(UAPI_OUT)/linux/ $(AUDIO_ROOT)/include/uapi/linux/ avtimer.h;)
 $(shell $(HEADER_INSTALL_DIR)/headers_install.sh $(UAPI_OUT)/linux/ $(AUDIO_ROOT)/include/uapi/linux/ msm_audio.h;)
 $(shell $(HEADER_INSTALL_DIR)/headers_install.sh $(UAPI_OUT)/linux/ $(AUDIO_ROOT)/include/uapi/linux/ msm_audio_aac.h;)
@@ -150,7 +188,7 @@ $(shell $(HEADER_INSTALL_DIR)/headers_install.sh $(UAPI_OUT)/sound/ $(AUDIO_ROOT
 $(shell $(HEADER_INSTALL_DIR)/headers_install.sh $(UAPI_OUT)/sound/ $(AUDIO_ROOT)/include/uapi/sound/ voice_params.h;)
 $(shell $(HEADER_INSTALL_DIR)/headers_install.sh $(UAPI_OUT)/sound/ $(AUDIO_ROOT)/include/uapi/sound/ wcd-dsp-glink.h;)
 
-KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/techpack/audio/dsp/Module.symvers
+KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/vendor/qcom/opensource/audio-kernel/dsp/Module.symvers
 
 endif
 
@@ -179,9 +217,15 @@ endif
 
 # Module information used by KBuild framework
 obj-$(CONFIG_MSM_QDSP6_APRV2) += apr_dlkm.o
+obj-$(CONFIG_MSM_QDSP6_APRV3) += apr_dlkm.o
 obj-$(CONFIG_MSM_QDSP6_APRV2_GLINK) += apr_dlkm.o
 obj-$(CONFIG_MSM_QDSP6_APRV3_GLINK) += apr_dlkm.o
 apr_dlkm-y := $(APRV_GLINK)
+
+ifeq ($(CONFIG_ARCH_MSM8909), $(CONFIG_MSM_BGCOM))
+	obj-$(CONFIG_MSM_BG_GLINK) += bg_glink_dlkm.o
+	bg_glink_dlkm-y := $(BG_GLINK)
+endif
 
 obj-$(CONFIG_WCD_DSP_GLINK) += wglink_dlkm.o
 wglink_dlkm-y := $(WDSP_GLINK)

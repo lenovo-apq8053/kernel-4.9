@@ -1,51 +1,17 @@
 # We can build either as part of a standalone Kernel build or as
 # an external module.  Determine which mechanism is being used
-ifeq ($(MODNAME),)
-	KERNEL_BUILD := 1
-else
-	KERNEL_BUILD := 0
-endif
+KERNEL_BUILD := 0
 
-
-ifeq ($(KERNEL_BUILD), 1)
-	# These are configurable via Kconfig for kernel-based builds
-	# Need to explicitly configure for Android-based builds
-	AUDIO_BLD_DIR := $(srctree)
-	AUDIO_ROOT := $(AUDIO_BLD_DIR)/techpack/audio
-	ifeq ($(CONFIG_ARCH_MSM8953), y)
-		include $(AUDIO_ROOT)/config/8953LATauto.conf
-		export
-		INCS    +=  -include $(AUDIO_ROOT)/config/8953LATautoconf.h
-	endif
-endif
 
 ifeq ($(KERNEL_BUILD), 0)
-	ifeq ($(CONFIG_ARCH_SDM845), y)
-		include $(AUDIO_ROOT)/config/sdm845auto.conf
+	# These are configurable via Kconfig for kernel-based builds
+	# Need to explicitly configure for Android-based builds
+	ifeq ($(CONFIG_ARCH_MSM8909), y)
+		include $(AUDIO_ROOT)/config/msm8909auto.conf
 		export
-		INCS    +=  -include $(AUDIO_ROOT)/config/sdm845autoconf.h
-	endif
-	ifeq ($(CONFIG_ARCH_SDM670), y)
-		include $(AUDIO_ROOT)/config/sdm710auto.conf
-		export
-		INCS    +=  -include $(AUDIO_ROOT)/config/sdm710autoconf.h
-	endif
-	ifeq ($(CONFIG_ARCH_SDM450), y)
-		include $(AUDIO_ROOT)/config/sdm450auto.conf
-		export
-		INCS    +=  -include $(AUDIO_ROOT)/config/sdm450autoconf.h
-	endif
-	ifeq ($(CONFIG_ARCH_SDM439), y)
-		include $(AUDIO_ROOT)/config/sdm450auto.conf
-		export
-		INCS    +=  -include $(AUDIO_ROOT)/config/sdm450autoconf.h
-	endif
-	ifeq ($(CONFIG_ARCH_MSM8917), y)
-		include $(AUDIO_ROOT)/config/sdm450auto.conf
-		export
-		INCS    +=  -include $(AUDIO_ROOT)/config/sdm450autoconf.h
 	endif
 endif
+
 
 # As per target team, build is done as follows:
 # Defconfig : build with default flags
@@ -71,27 +37,22 @@ UAPI_INC :=	-I$(AUDIO_ROOT)/include/$(UAPI_DIR)
 COMMON_DIR :=	include
 COMMON_INC :=	-I$(AUDIO_ROOT)/$(COMMON_DIR)
 
-############ SDM660_CDC ############
+############ BG_CODEC_CDC ############
 
-# for SDM660_CDC Codec
-ifdef CONFIG_SND_SOC_ANALOG_CDC
-	ANALOG_CDC_OBJS += msm-analog-cdc.o
-	ANALOG_CDC_OBJS += sdm660-cdc-irq.o
+# for BG Codec
+ifeq ($(CONFIG_SND_SOC_BG_CODEC), m)
+	BG_CODEC_CDC_OBJS += bg_codec.o
+	BG_CODEC_CDC_OBJS += pktzr.o
 endif
 
-ifdef CONFIG_SND_SOC_DIGITAL_CDC
-	DIGITAL_CDC_OBJS += msm-digital-cdc.o
-	DIGITAL_CDC_OBJS += msm-digital-cdc-regmap.o
-endif
-
-ifdef CONFIG_SND_SOC_DIGITAL_CDC_LEGACY
-	DIGITAL_CDC_OBJS += msm-digital-cdc-legacy.o
-	DIGITAL_CDC_OBJS += msm-digital-cdc-legacy-regmap.o
-endif
 LINUX_INC +=	-Iinclude/linux
 
-INCS +=		$(COMMON_INC) \
+INCS :=		$(COMMON_INC) \
 		$(UAPI_INC)
+
+ifeq ($(CONFIG_ARCH_MSM8909), y)
+INCS    +=  -include $(AUDIO_ROOT)/config/msm8909autoconf.h
+endif
 
 EXTRA_CFLAGS += $(INCS)
 
@@ -121,7 +82,6 @@ ifeq ($(call cc-option-yn, -Wheader-guard),y)
 EXTRA_CFLAGS += -Wheader-guard
 endif
 
-
 ifeq ($(KERNEL_BUILD), 0)
 KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/vendor/qcom/opensource/audio-kernel/ipc/Module.symvers
 KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/vendor/qcom/opensource/audio-kernel/dsp/Module.symvers
@@ -131,13 +91,8 @@ KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/vendor/qcom/opensource/audio-kernel/soc/Module
 endif
 
 # Module information used by KBuild framework
-obj-$(CONFIG_SND_SOC_ANALOG_CDC) += analog_cdc_dlkm.o
-analog_cdc_dlkm-y := $(ANALOG_CDC_OBJS)
+obj-$(CONFIG_SND_SOC_BG_CODEC) += bg_codec_dlkm.o
+bg_codec_dlkm-y := $(BG_CODEC_CDC_OBJS)
 
-obj-$(CONFIG_SND_SOC_DIGITAL_CDC) += digital_cdc_dlkm.o
-digital_cdc_dlkm-y := $(DIGITAL_CDC_OBJS)
-
-obj-$(CONFIG_SND_SOC_DIGITAL_CDC_LEGACY) += digital_cdc_dlkm.o
-digital_cdc_dlkm-y := $(DIGITAL_CDC_OBJS)
 # inject some build related information
 DEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"

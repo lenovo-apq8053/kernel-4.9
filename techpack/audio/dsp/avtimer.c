@@ -73,7 +73,7 @@ struct avtimer_t {
 };
 
 static struct avtimer_t avtimer;
-//static void avcs_set_isp_fptr(bool enable);
+static void avcs_set_isp_fptr(bool enable);
 
 static int32_t aprv2_core_fn_q(struct apr_client_data *data, void *priv)
 {
@@ -317,28 +317,65 @@ int avcs_core_query_timer(uint64_t *avtimer_tick)
 }
 EXPORT_SYMBOL(avcs_core_query_timer);
 
-// #if 0
-// static void avcs_set_isp_fptr(bool enable)
-// {
-	// struct avtimer_fptr_t av_fptr;
+/* This function will return the offset between system clock & avtimer clock
+   which can then be used to map timestamps coming from avtimer in system time
+   context. Also adsp state doesn't needed to be checked in this function as it
+   would be made sure in caller context */
 
-	// if (enable) {
-		// av_fptr.fptr_avtimer_open = avcs_core_open;
-		// av_fptr.fptr_avtimer_enable = avcs_core_disable_power_collapse;
-		// av_fptr.fptr_avtimer_get_time = avcs_core_query_timer;
-		// msm_isp_set_avtimer_fptr(av_fptr);
-	// } else {
-		// av_fptr.fptr_avtimer_open = NULL;
-		// av_fptr.fptr_avtimer_enable = NULL;
-		// av_fptr.fptr_avtimer_get_time = NULL;
-		// msm_isp_set_avtimer_fptr(av_fptr);
-	// }
-// }
-// #else
-// static void avcs_set_isp_fptr(bool enable)
-// {
-// }
-// #endif
+int avcs_core_query_timer_offset(int64_t *av_offset)
+{
+	uint32_t avtimer_msw = 0, avtimer_lsw = 0;
+	uint32_t res = 0;
+	uint64_t avtimer_tick_temp, sys_time = 0;
+	struct timespec ts = {0};
+
+	mutex_lock(&avtimer.avtimer_lock);
+	if ((avtimer.p_avtimer_lsw == NULL)||(avtimer.p_avtimer_msw == NULL))
+	{
+		mutex_unlock(&avtimer.avtimer_lock);
+		return -EINVAL;
+	}
+
+	avtimer_lsw = ioread32(avtimer.p_avtimer_lsw);
+	avtimer_msw = ioread32(avtimer.p_avtimer_msw);
+
+	ktime_get_ts(&ts);
+	mutex_unlock(&avtimer.avtimer_lock);
+
+	sys_time = ts.tv_sec * 1000000LL + div64_u64(ts.tv_nsec, 1000);
+	avtimer_tick_temp = (uint64_t)((uint64_t)avtimer_msw << 32) | avtimer_lsw;
+
+	res = do_div(avtimer_tick_temp, avtimer.clk_div);
+	*av_offset = sys_time - avtimer_tick_temp;
+	pr_debug_ratelimited("%s:Avtimer: sys_time: %llu, avtime %llu offset %lld\n",
+			__func__,
+			sys_time, avtimer_tick_temp, *av_offset);
+	return 0;
+}
+EXPORT_SYMBOL(avcs_core_query_timer_offset);
+
+#if IS_ENABLED(CONFIG_AVTIMER_LEGACY)
+static void avcs_set_isp_fptr(bool enable)
+{
+	struct avtimer_fptr_t av_fptr;
+
+	if (enable) {
+		av_fptr.fptr_avtimer_open = avcs_core_open;
+		av_fptr.fptr_avtimer_enable = avcs_core_disable_power_collapse;
+		av_fptr.fptr_avtimer_get_time = avcs_core_query_timer;
+		msm_isp_set_avtimer_fptr(av_fptr);
+	} else {
+		av_fptr.fptr_avtimer_open = NULL;
+		av_fptr.fptr_avtimer_enable = NULL;
+		av_fptr.fptr_avtimer_get_time = NULL;
+		msm_isp_set_avtimer_fptr(av_fptr);
+	}
+}
+#else
+static void avcs_set_isp_fptr(bool enable)
+{
+}
+#endif
 
 static int avtimer_open(struct inode *inode, struct file *file)
 {
@@ -496,7 +533,7 @@ static int dev_avtimer_probe(struct platform_device *pdev)
 	else
 		avtimer.clk_mult = clk_mult_val;
 
-	//avcs_set_isp_fptr(true);
+	avcs_set_isp_fptr(true);
 
 	pr_debug("%s: avtimer.clk_div = %d, avtimer.clk_mult = %d\n",
 		 __func__, avtimer.clk_div, avtimer.clk_mult);
@@ -529,7 +566,7 @@ static int dev_avtimer_remove(struct platform_device *pdev)
 	cdev_del(&avtimer.myc);
 	class_destroy(avtimer.avtimer_class);
 	unregister_chrdev_region(MKDEV(major, 0), 1);
-	//avcs_set_isp_fptr(false);
+	avcs_set_isp_fptr(false);
 
 	return 0;
 }
