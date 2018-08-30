@@ -289,9 +289,13 @@
 	pinctrl-0 = <&uart_console_active>;
 };
 
+/* Enable for coprocessor */
+&i2c_1 {
+	status = "ok";
+};
+
 &i2c_4 {
 	status = "ok";
-
 	opt3001@44 {
 		compatible = "ti,opt3001";
 		reg = <0x44>; /* ALS_ADDR connected to ground */
@@ -303,6 +307,21 @@
 		reg = <0x40>;
 		shunt-resistor = <10000>;
 	};
+
+	shtw2@70 {
+		compatible = "shtc1";
+		reg = <0x70>;
+	};
+
+	lm36011@64 {
+		compatible = "lm36011";
+		reg = <0x64>;
+	};
+};
+
+/* Enable for coprocessor PMIC */
+&i2c_7 {
+	status = "ok";
 };
 
 &sdhc_1 {
@@ -332,6 +351,29 @@
 
 &i2c_8 {
 	status = "ok";
+	lp5569@35 {
+		compatible = "ti,lp5569";
+		reg = <0x35>;
+		clock-mode = /bits/8 <1>;
+		chan0 {
+			chan-name = "lp5569:R";
+			led-cur = /bits/ 8 <0x20>;
+			max-cur = /bits/ 8 <0x60>;
+		};
+
+		chan1 {
+			chan-name = "lp5569:G";
+			led-cur = /bits/ 8 <0x20>;
+			max-cur = /bits/ 8 <0x60>;
+		};
+
+		chan2 {
+			chan-name = "lp5569:B";
+			led-cur = /bits/ 8 <0x20>;
+			max-cur = /bits/ 8 <0x60>;
+		};
+
+	};
 
 	tlc59108@42 {
 		#address-cells = <1>;
@@ -539,6 +581,16 @@
 		qcom,cam-power-seq-cfg-val = <1>;
 		qcom,cam-power-seq-delay = <1>;
 		status = "ok";
+	};
+
+	drv8830@64 {
+		compatible = "ti,drv8830";
+		reg = <0x64>;
+		ti,vset_setting = <0x30>; /* 0x30 translates to 3.86v */
+		ti,fault_gpio = <&tlmm 53 0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&icr_int_default>;
+		status = "okay";
 	};
 };
 
