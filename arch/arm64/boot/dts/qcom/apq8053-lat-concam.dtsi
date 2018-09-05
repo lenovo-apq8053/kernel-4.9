@@ -49,6 +49,17 @@
 
 };
 
+/ {
+	bcmdhd_wlan: bcmdhd_wlan@1 {
+		compatible = "android,bcmdhd_wlan";
+		non-removable;
+		wl_chip = "bcm4354_sdio";
+		wl_dev_wake = <&tlmm 46 0>;     /* WIFI_DEV_WAKE */
+		wl_host_wake = <&tlmm 45 0>;    /* WIFI_WL_HOST_WAKE */
+		wl_reg_on = <&tlmm 47 0>;       /* WIFI_WL_REG_ON */
+	};
+};
+
 &sdhc_2 {
 	nest,workaround-ocr-add-vio = "VIO_3_3";
 };
