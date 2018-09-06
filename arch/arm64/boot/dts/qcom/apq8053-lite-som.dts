@@ -445,3 +445,13 @@
 &blsp2_uart0 {
 	status = "okay";
 };
+
+&spi_6 {
+	status = "disabled";
+
+	spidev@0 {
+		compatible = "spidev";
+		spi-max-frequency = <19200000>;
+		reg = <0>;
+	};
+};
