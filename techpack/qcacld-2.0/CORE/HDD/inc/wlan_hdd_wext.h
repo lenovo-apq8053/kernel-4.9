@@ -429,7 +429,6 @@ extern void *mem_alloc_copy_from_user_helper(const void *wrqu_data, size_t len);
 extern VOS_STATUS wlan_hdd_get_linkspeed_for_peermac(hdd_adapter_t *pAdapter,
                                                      tSirMacAddr macAddress);
 void hdd_clearRoamProfileIe( hdd_adapter_t *pAdapter);
-void hdd_GetClassA_statisticsCB(void *pStats, void *pContext);
 void hdd_GetLink_SpeedCB(tSirLinkSpeedInfo *pLinkSpeed, void *pContext);
 
 VOS_STATUS wlan_hdd_check_ula_done(hdd_adapter_t *pAdapter);
@@ -481,7 +480,7 @@ int wlan_hdd_update_phymode(struct net_device *net, tHalHandle hal,
 int process_wma_set_command_twoargs(int sessid, int paramid,
                                     int sval, int ssecval, int vpdev);
 
-void hdd_GetTemperatureCB(int temperature, void *pContext);
-VOS_STATUS wlan_hdd_get_temperature(hdd_adapter_t *pAdapter,
+void hdd_GetTemperatureCB(int temperature, void *cookie);
+VOS_STATUS wlan_hdd_get_temperature(hdd_adapter_t *adapter_ptr,
         union iwreq_data *wrqu, char *extra);
 #endif // __WEXT_IW_H__
