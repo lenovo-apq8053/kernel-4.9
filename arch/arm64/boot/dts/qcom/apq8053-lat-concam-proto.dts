@@ -18,7 +18,7 @@
 #include "apq8053-lat-concam-regulator.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. APQ8053 LAT Concam Dev board";
+	model = "Qualcomm Technologies, Inc. APQ8053 LAT Concam PROTO";
 	compatible = "qcom,apq8053-mtp", "qcom,apq8053", "qcom,mtp";
 	qcom,board-id= <0x56 0x31>;
 };
