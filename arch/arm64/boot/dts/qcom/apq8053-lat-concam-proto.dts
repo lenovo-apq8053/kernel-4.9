@@ -145,6 +145,18 @@
 	};
 };
 
+&i2c_4 {
+	drv8830@64 {
+		compatible = "ti,drv8830";
+		reg = <0x64>;
+		ti,vset_setting = <0x30>; /* 0x30 translates to 3.86v */
+		ti,fault_gpio = <&tlmm 53 0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&icr_int_default>;
+		status = "okay";
+	};
+};
+
 &modem_mem {
 	reg = <0x0 0x86c00000 0x0 0x1e00000>;
 };
