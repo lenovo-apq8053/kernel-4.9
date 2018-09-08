@@ -423,11 +423,6 @@
 		compatible = "shtc1";
 		reg = <0x70>;
 	};
-
-	lm36011@64 {
-		compatible = "lm36011";
-		reg = <0x64>;
-	};
 };
 
 /* Enable for coprocessor PMIC */
