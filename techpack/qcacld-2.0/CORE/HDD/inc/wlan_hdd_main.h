@@ -347,7 +347,6 @@ extern spinlock_t hdd_context_lock;
 #define STATS_CONTEXT_MAGIC 0x53544154   //STAT
 #define PEER_INFO_CONTEXT_MAGIC  0x52535349   /* PEER_INFO */
 #define POWER_CONTEXT_MAGIC 0x504F5752   //POWR
-#define SNR_CONTEXT_MAGIC   0x534E5200   //SNR
 #define LINK_CONTEXT_MAGIC  0x4C494E4B   //LINKSPEED
 #define LINK_STATUS_MAGIC   0x4C4B5354   //LINKSTATUS(LNST)
 #define TEMP_CONTEXT_MAGIC 0x74656d70   // TEMP (temperature)
@@ -1413,7 +1412,6 @@ struct hdd_adapter_s
 
     /* State for synchronous OCB requests to WMI */
     struct sir_ocb_set_config_response ocb_set_config_resp;
-    struct sir_ocb_get_tsf_timer_response ocb_get_tsf_timer_resp;
     struct dsrc_radio_chan_stats_ctxt dsrc_chan_stats;
 #ifdef WLAN_FEATURE_DSRC
     /* MAC addresses used for OCB interfaces */
