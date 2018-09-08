@@ -403,6 +403,13 @@ config TI_DAC7512
 	  This driver can also be built as a module. If so, the module
 	  will be called ti_dac7512.
 
+config TI_DRV8830
+	tristate "TI's DRV8830 motor controller support"
+	depends on I2C
+	help
+	  To compile this driver as a module, choose M here: the
+	  module will be called ti_drv8830.
+
 config VMWARE_BALLOON
 	tristate "VMware Balloon Driver"
 	depends on VMWARE_VMCI && X86 && HYPERVISOR_GUEST
