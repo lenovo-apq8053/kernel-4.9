@@ -15,6 +15,7 @@
 
 #include "apq8053-lat-concam.dtsi"
 #include "apq8053-camera-sensor-mtp.dtsi"
+#include "apq8053-lat-concam-camera.dtsi"
 #include "apq8053-lat-concam-regulator.dtsi"
 
 / {
