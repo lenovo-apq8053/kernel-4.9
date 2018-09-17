@@ -194,13 +194,6 @@
 		pinctrl-1 = <&cdc_dmic0_clk_sus &cdc_dmic0_data_sus>;
 	};
 
-	cdc_quat_mi2s_gpios: msm_cdc_pinctrl_quat {
-		compatible = "qcom,msm-cdc-pinctrl";
-		pinctrl-names = "aud_active", "aud_sleep";
-		pinctrl-0 = <&sec_tlmm_lines_act &ext_amp_ctrl_active>;
-		pinctrl-1 = <&sec_tlmm_lines_sus &ext_amp_ctrl_sleep>;
-	};
-
 	ssphy: ssphy@78000 {
 		qcom,qmp-phy-init-seq = /*<reg_offset, value, delay>*/
 					<0xac 0x14 0x00
@@ -748,6 +741,5 @@
 		"DMIC2", "MIC BIAS Internal1",
 		"MIC BIAS Internal1", "Digital Mic2";
 
-	qcom,quat-mi2s-gpios = <&cdc_quat_mi2s_gpios>;
 	qcom,cdc-dmic-gpios = <&cdc_dmic_gpios>;
 };
