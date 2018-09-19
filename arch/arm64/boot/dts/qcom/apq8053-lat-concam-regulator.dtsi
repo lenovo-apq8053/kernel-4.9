@@ -98,8 +98,9 @@
 			compatible = "qcom,rpm-smd-regulator";
 			regulator-name = "pm8953_l2";
 			qcom,set = <3>;
-			regulator-always-on;
-			regulator-boot-on;
+			regulator-min-microvolt = <1200000>;
+			regulator-max-microvolt = <1200000>;
+			qcom,init-voltage = <1200000>;
 			status = "okay";
 		};
 	};
@@ -133,8 +134,9 @@
 			compatible = "qcom,rpm-smd-regulator";
 			regulator-name = "pm8953_l17";
 			qcom,set = <3>;
-			regulator-always-on;
-			regulator-boot-on;
+			regulator-min-microvolt = <2850000>;
+			regulator-max-microvolt = <3200000>;
+			qcom,init-voltage = <3020000>;
 			status = "okay";
 		};
 	};
@@ -152,8 +154,9 @@
 			compatible = "qcom,rpm-smd-regulator";
 			regulator-name = "pm8953_l6";
 			qcom,set = <3>;
-			regulator-always-on;
-			regulator-boot-on;
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			qcom,init-voltage = <1800000>;
 			status = "okay";
 		};
 	};
