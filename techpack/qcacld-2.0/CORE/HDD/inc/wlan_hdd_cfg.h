@@ -725,10 +725,10 @@ enum
 #define CFG_QOS_WMM_MODE_MAX                               (2) //HDD_WMM_NO_QOS
 #define CFG_QOS_WMM_MODE_DEFAULT                           (0) //HDD_WMM_AUTO
 
-#define CFG_STA_LOCAL_EDCA_FOR_ETSI_NAME                "gStaLocalEDCAForETSI"
-#define CFG_STA_LOCAL_EDCA_FOR_ETSI_MIN                 (0)
-#define CFG_STA_LOCAL_EDCA_FOR_ETSI_MAX                 (1)
-#define CFG_STA_LOCAL_EDCA_FOR_ETSI_DEFAULT             (0)
+#define CFG_STA_LOCAL_EDCA_FOR_ETSI_NAME                  "gStaLocalEDCAForETSI"
+#define CFG_STA_LOCAL_EDCA_FOR_ETSI_MIN                   (0)
+#define CFG_STA_LOCAL_EDCA_FOR_ETSI_MAX                   (1)
+#define CFG_STA_LOCAL_EDCA_FOR_ETSI_DEFAULT               (0)
 
 #define CFG_QOS_WMM_80211E_ENABLED_NAME                   "80211eIsEnabled"
 #define CFG_QOS_WMM_80211E_ENABLED_MIN                     (0)
