@@ -281,6 +281,37 @@
 			};
 		};
 	};
+
+	cam_sensor_mclk0_default {
+		/* MCLK0 */
+		mux {
+			/* CLK, DATA */
+			pins = "gpio26";
+			function = "cam_mclk";
+		};
+
+		config {
+			pins = "gpio26";
+			bias-disable; /* No PULL */
+			drive-strength = <6>; /* 6 MA */
+		};
+	};
+
+	cam_sensor_mclk0_sleep {
+		/* MCLK0 */
+		mux {
+			/* CLK, DATA */
+			pins = "gpio26";
+			function = "cam_mclk";
+		};
+
+		config {
+			pins = "gpio26";
+			bias-pull-down; /* PULL DOWN */
+			drive-strength = <6>; /* 6 MA */
+		};
+	};
+
 };
 
 &blsp1_uart0 {
