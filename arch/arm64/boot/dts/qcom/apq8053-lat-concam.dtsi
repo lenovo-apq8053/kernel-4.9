@@ -524,14 +524,14 @@
 		};
 	};
 
-	tlc59116@68 {
+	tlc59116@60 {
 		#address-cells = <1>;
 		#size-cells = <0>;
 		#gpio-cells = <2>;
 		enable-gpio = <&tlmm 61 GPIO_ACTIVE_HIGH>;
 		compatible = "ti,tlc59116";
 		label = "tlc59116";
-		reg = <0x68>;
+		reg = <0x60>;
 
 		chan0@0 {
 			label = "tlc59116:chan0";
