@@ -41,7 +41,7 @@ config RFKILL_REGULATOR
 
 config RFKILL_GPIO
 	tristate "GPIO RFKILL driver"
-	depends on RFKILL
+	depends on RFKILL && GPIOLIB && HAVE_CLK
 	depends on GPIOLIB || COMPILE_TEST
 	default n
 	help
