@@ -534,19 +534,19 @@
 		chan0 {
 			chan-name = "lp5569:R";
 			led-cur = /bits/ 8 <0x20>;
-			max-cur = /bits/ 8 <0x60>;
+			max-cur = /bits/ 8 <0xff>;
 		};
 
 		chan1 {
 			chan-name = "lp5569:G";
 			led-cur = /bits/ 8 <0x20>;
-			max-cur = /bits/ 8 <0x60>;
+			max-cur = /bits/ 8 <0xff>;
 		};
 
 		chan2 {
 			chan-name = "lp5569:B";
 			led-cur = /bits/ 8 <0x20>;
-			max-cur = /bits/ 8 <0x60>;
+			max-cur = /bits/ 8 <0xff>;
 		};
 
 	};
