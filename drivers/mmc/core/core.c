@@ -4393,7 +4393,8 @@ int _mmc_detect_card_removed(struct mmc_host *host)
 	}
 
 	if (ret) {
-		if (host->ops->get_cd && host->ops->get_cd(host)) {
+		if (mmc_card_sd(host->card) &&
+			host->ops->get_cd && host->ops->get_cd(host)) {
 			ret = mmc_recovery_fallback_lower_speed(host);
 		} else {
 			mmc_card_set_removed(host->card);
