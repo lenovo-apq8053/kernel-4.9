@@ -1358,10 +1358,20 @@ static int wma_vdev_start_rsp_ind(tp_wma_handle wma, u_int8_t *buf)
 
 	iface = &wma->interfaces[resp_event->vdev_id];
 
+	req_msg = wma_find_vdev_req(wma, resp_event->vdev_id,
+				    WMA_TARGET_REQ_TYPE_VDEV_START);
+
+	if (!req_msg) {
+		WMA_LOGE("%s: Failed to lookup request message for vdev %d",
+			 __func__, resp_event->vdev_id);
+		return -EINVAL;
+	}
+
 	if ((resp_event->vdev_id < wma->max_bssid) &&
 		(adf_os_atomic_read(
 		&wma->interfaces[resp_event->vdev_id].vdev_restart_params.hidden_ssid_restart_in_progress)) &&
-		(wma_is_vdev_in_ap_mode(wma, resp_event->vdev_id) == true)) {
+		(wma_is_vdev_in_ap_mode(wma, resp_event->vdev_id) == true) &&
+		(req_msg->msg_type == WDA_HIDDEN_SSID_VDEV_RESTART)) {
 		WMA_LOGE(
 			"%s: vdev restart event recevied for hidden ssid set using IOCTL",
 			__func__);
@@ -1384,15 +1394,6 @@ static int wma_vdev_start_rsp_ind(tp_wma_handle wma, u_int8_t *buf)
 		                            OL_TXQ_PAUSE_REASON_VDEV_STOP);
 		iface->pause_bitmap &= ~(1 << PAUSE_TYPE_HOST);
 
-	}
-
-	req_msg = wma_find_vdev_req(wma, resp_event->vdev_id,
-				    WMA_TARGET_REQ_TYPE_VDEV_START);
-
-	if (!req_msg) {
-		WMA_LOGE("%s: Failed to lookup request message for vdev %d",
-			 __func__, resp_event->vdev_id);
-		return -EINVAL;
 	}
 
 	vos_timer_stop(&req_msg->event_timeout);
@@ -5095,7 +5096,7 @@ static int wma_unified_link_peer_stats_event_handler(void *handle,
 	size_t peer_info_size, peer_stats_size, rate_stats_size;
 	size_t link_stats_results_size;
 	bool excess_data = false;
-	u_int32_t buf_len;
+	u_int32_t buf_len = 0;
 
 	tpAniSirGlobal pMac = (tpAniSirGlobal )vos_get_context(VOS_MODULE_ID_PE,
                                 wma_handle->vos_context);
@@ -5163,7 +5164,7 @@ static int wma_unified_link_peer_stats_event_handler(void *handle,
 	} while (0);
 
 	if (excess_data ||
-		(sizeof(*fixed_param) > WMA_SVC_MSG_MAX_SIZE - buf_len)) {
+	    (buf_len > WMA_SVC_MSG_MAX_SIZE - sizeof(*fixed_param))) {
 		WMA_LOGE("excess wmi buffer: rates:%d, peers:%d",
 			peer_stats->num_rates, fixed_param->num_peers);
 		VOS_ASSERT(0);
@@ -5432,6 +5433,22 @@ static int wma_unified_link_radio_stats_event_handler(void *handle,
 	}
 
 	link_stats_results = wma_handle->link_stats_results;
+	if (link_stats_results->num_radio == 0) {
+		link_stats_results->num_radio = fixed_param->num_radio;
+	} else if (link_stats_results->num_radio < fixed_param->num_radio) {
+		/*
+		 * The link stats results size allocated based on num_radio of
+		 * first event must be same as following events. Otherwise these
+		 * events may be spoofed. Drop all of them and report error.
+		 */
+		WMA_LOGE("Invalid following WMI_RADIO_LINK_STATS_EVENTID. Discarding this set");
+		rs_results->tx_time_per_power_level = NULL;
+		vos_mem_free(wma_handle->link_stats_results);
+		wma_handle->link_stats_results = NULL;
+		vos_mem_free(rs_results->tx_time_per_power_level);
+		return -EINVAL;
+	}
+
 	vos_mem_zero(link_stats_results, link_stats_results_size);
 
 	link_stats_results->paramId            = WMI_LINK_STATS_RADIO;
@@ -7889,7 +7906,7 @@ static int wma_nan_rsp_event_handler(void *handle, u_int8_t *event_buf,
 	alloc_len = sizeof(tSirNanEvent);
 	alloc_len += nan_rsp_event_hdr->data_len;
 	if (nan_rsp_event_hdr->data_len > ((WMA_SVC_MSG_MAX_SIZE -
-	    sizeof(*nan_rsp_event_hdr)) / sizeof(u_int8_t)) ||
+	    WMI_TLV_HDR_SIZE - sizeof(*nan_rsp_event_hdr)) / sizeof(u_int8_t)) ||
 	    nan_rsp_event_hdr->data_len > param_buf->num_data)  {
 		WMA_LOGE("excess data length:%d", nan_rsp_event_hdr->data_len);
 		VOS_ASSERT(0);
@@ -8669,7 +8686,7 @@ static int wma_stats_ext_event_handler(void *handle, u_int8_t *event_buf,
 	alloc_len += stats_ext_info->data_len;
 
 	if (stats_ext_info->data_len > (WMA_SVC_MSG_MAX_SIZE -
-	    sizeof(*stats_ext_info)) ||
+	    WMI_TLV_HDR_SIZE - sizeof(*stats_ext_info)) ||
 	    stats_ext_info->data_len > param_buf->num_data) {
 		WMA_LOGE("Excess data_len:%d", stats_ext_info->data_len);
 		VOS_ASSERT(0);
@@ -29595,7 +29612,7 @@ VOS_STATUS wma_stats_ext_req(void *wda_handle,
 	tp_wma_handle wma = (tp_wma_handle)wda_handle;
 	wmi_req_stats_ext_cmd_fixed_param *cmd;
 	wmi_buf_t buf;
-	u_int16_t len;
+	size_t len;
 	u_int8_t *buf_ptr;
 
 	len = sizeof(*cmd) + WMI_TLV_HDR_SIZE +
@@ -31085,6 +31102,18 @@ static VOS_STATUS wma_nan_req(void *wda_handle, tpNanRequest nan_req)
 	nan_data_len = nan_req->request_data_len;
 	nan_data_len_aligned = roundup(nan_req->request_data_len,
 				sizeof(u_int32_t));
+	if (nan_data_len_aligned < nan_req->request_data_len) {
+		WMA_LOGE("%s: integer overflow while rounding up data_len",
+			 __func__);
+		return VOS_STATUS_E_NOMEM;
+	}
+
+	if (nan_data_len_aligned > WMA_SVC_MSG_MAX_SIZE - WMI_TLV_HDR_SIZE) {
+		WMA_LOGE("%s: wmi_max_msg_size overflow for given datalen",
+			 __func__);
+		return VOS_STATUS_E_NOMEM;
+	}
+
 	len += WMI_TLV_HDR_SIZE + nan_data_len_aligned;
 	buf = wmi_buf_alloc(wma_handle->wmi_handle, len);
 	if (!buf) {
