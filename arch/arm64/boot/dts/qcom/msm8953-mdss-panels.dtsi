@@ -30,7 +30,7 @@
 #include "dsi-panel-inxnt51021-1200p-video.dtsi"
 #include "dsi-panel-starry-800p-video.dtsi"
 #include "dsi-panel-kd101n89-800p-video.dtsi"
-
+#include "dsi-panel-jd9365-800p-video.dtsi"
 &soc {
 	dsi_panel_pwr_supply: dsi_panel_pwr_supply {
 		#address-cells = <1>;
@@ -214,6 +214,14 @@
 };
 
 &dsi_kd101n89_800p_video {
+        qcom,mdss-dsi-panel-timings-phy-v2 = [1f 1c 05 06 03 03 04 a0
+                1f 1c 05 06 03 03 04 a0
+                1f 1c 05 06 03 03 04 a0
+                1f 1c 05 06 03 03 04 a0
+                1f 10 05 06 03 03 04 a0];
+};
+
+&dsi_jd9365_800p_video {
         qcom,mdss-dsi-panel-timings-phy-v2 = [1f 1c 05 06 03 03 04 a0
                 1f 1c 05 06 03 03 04 a0
                 1f 1c 05 06 03 03 04 a0
