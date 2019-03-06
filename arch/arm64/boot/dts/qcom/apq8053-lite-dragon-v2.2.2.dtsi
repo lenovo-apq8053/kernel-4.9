@@ -55,7 +55,7 @@
 
 		touchscreen-max-id = <11>;
 		touchscreen-size-x = <800>;
-		touchscreen-size-y = <1200>;
+		touchscreen-size-y = <1280>;
 		touchscreen-max-w = <1024>;
 		touchscreen-max-p = <1024>;
 
