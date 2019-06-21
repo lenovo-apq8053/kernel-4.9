@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -3291,6 +3291,17 @@ static int cam_icp_mgr_process_cmd_desc(struct cam_icp_hw_mgr *hw_mgr,
 				return rc;
 			}
 			*fw_cmd_buf_iova_addr = addr;
+
+			if (cmd_desc[i].offset >= len ||
+				((len - cmd_desc[i].offset) <
+				cmd_desc[i].size)){
+				CAM_ERR(CAM_ICP,
+					"Invalid offset/length, i %d offset 0x%x len 0x%x size 0x%x",
+					i, cmd_desc[i].offset,
+					len, cmd_desc[i].size);
+				goto rel_cmd_buf;
+			}
+
 			*fw_cmd_buf_iova_addr =
 				(*fw_cmd_buf_iova_addr + cmd_desc[i].offset);
 			rc = cam_mem_get_cpu_buf(cmd_desc[i].mem_handle,
@@ -3610,6 +3621,9 @@ static int cam_icp_mgr_prepare_hw_update(void *hw_mgr_priv,
 	}
 
 	packet = prepare_args->packet;
+
+	if (cam_packet_util_validate_packet(packet, prepare_args->remain_len))
+		return -EINVAL;
 
 	rc = cam_icp_mgr_pkt_validation(packet);
 	if (rc) {
